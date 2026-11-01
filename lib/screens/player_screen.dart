@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:provider/provider.dart';
@@ -62,6 +63,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showVolumeIndicator = false;
   Timer? _indicatorHideTimer;
   bool _lastReportedPlaying = false;
+
+  // Horizontal Swipe Seek controls & YouTube-style Preview
+  bool _isDraggingSeek = false;
+  bool _showSeekPreview = false;
+  Duration _seekStartPosition = Duration.zero;
+  Duration _seekTargetPosition = Duration.zero;
+  Timer? _seekPreviewHideTimer;
+  bool _isDraggingBottomSlider = false;
+  double _bottomSliderValue = 0.0;
 
   @override
   void initState() {
@@ -223,6 +233,70 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
+  void _onHorizontalDragStart(DragStartDetails details) {
+    if (_isPipMode || _isLoading || _errorMessage != null) return;
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final dur = c.value.duration;
+    if (dur <= Duration.zero) return;
+
+    _seekPreviewHideTimer?.cancel();
+    _isDraggingSeek = true;
+    _seekStartPosition = c.value.position;
+    _seekTargetPosition = _seekStartPosition;
+    _showSeekPreview = true;
+    _startHideTimer();
+    setState(() {});
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    if (!_isDraggingSeek) return;
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final dur = c.value.duration;
+    if (dur <= Duration.zero) return;
+
+    final width = MediaQuery.of(context).size.width;
+    // Dragging across the screen scrolls ~180s for longer anime, 90s for shorter
+    final scrubWindowSeconds = dur.inSeconds > 600 ? 180.0 : 90.0;
+    final deltaSeconds = (details.delta.dx / width) * scrubWindowSeconds;
+    final newMs = (_seekTargetPosition.inMilliseconds + (deltaSeconds * 1000).toInt())
+        .clamp(0, dur.inMilliseconds);
+
+    _seekTargetPosition = Duration(milliseconds: newMs);
+    _startHideTimer();
+    setState(() {});
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    if (!_isDraggingSeek) return;
+    _isDraggingSeek = false;
+    final c = _controller;
+    if (c != null && c.value.isInitialized) {
+      c.seekTo(_seekTargetPosition);
+      // Continuous playback: keep playing seamlessly from the scrubbed position!
+      if (!c.value.isPlaying) {
+        c.play();
+      }
+    }
+    _seekPreviewHideTimer?.cancel();
+    _seekPreviewHideTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) {
+        setState(() {
+          _showSeekPreview = false;
+        });
+      }
+    });
+    _startHideTimer();
+    setState(() {});
+  }
+
+  void _onHorizontalDragCancel() {
+    _isDraggingSeek = false;
+    _showSeekPreview = false;
+    setState(() {});
+  }
+
   /// Extra dimming overlay opacity when brightness is set below 30% down to 0%
   /// allows ultra-low, soothing night viewing in pitch-dark rooms.
   double get _dimOverlayOpacity {
@@ -264,9 +338,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       // In Picture-in-Picture mode, allow video to continue playing while using other apps!
       return;
     }
-    // Pause video immediately when screen turns off or app is minimized/in background
+    // Pause video immediately ONLY when screen turns off or app is minimized/in background
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden) {
       _controller?.pause();
       _initializingController?.pause();
@@ -289,6 +362,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _progressSaveTimer?.cancel();
     _resumeNoticeTimer?.cancel();
     _indicatorHideTimer?.cancel();
+    _seekPreviewHideTimer?.cancel();
     _saveProgress();
 
     final c = _controller;
@@ -891,6 +965,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           onVerticalDragStart: _onVerticalDragStart,
           onVerticalDragUpdate: _onVerticalDragUpdate,
           onVerticalDragEnd: _onVerticalDragEnd,
+          onHorizontalDragStart: _onHorizontalDragStart,
+          onHorizontalDragUpdate: _onHorizontalDragUpdate,
+          onHorizontalDragEnd: _onHorizontalDragEnd,
+          onHorizontalDragCancel: _onHorizontalDragCancel,
           behavior: HitTestBehavior.opaque,
           child: Stack(
             fit: StackFit.expand,
@@ -1126,6 +1204,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     _startHideTimer();
                   },
                 ),
+
+              // YouTube-style Horizontal Seek Preview HUD
+              if (_showSeekPreview && !_isLoading && _errorMessage == null && !_isPipMode)
+                _buildSeekPreviewHud(dur),
             ],
           ),
         ),
@@ -1449,12 +1531,28 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                     ),
                     child: Slider(
-                      value: dur.inMilliseconds > 0
-                          ? pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble()
-                          : 0.0,
+                      value: _isDraggingBottomSlider
+                          ? _bottomSliderValue.clamp(0.0, dur.inMilliseconds.toDouble())
+                          : (dur.inMilliseconds > 0
+                              ? pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble()
+                              : 0.0),
                       max: dur.inMilliseconds.toDouble(),
+                      onChangeStart: (val) {
+                        _isDraggingBottomSlider = true;
+                        _bottomSliderValue = val;
+                      },
                       onChanged: (val) {
+                        setState(() {
+                          _bottomSliderValue = val;
+                        });
+                        _startHideTimer();
+                      },
+                      onChangeEnd: (val) {
+                        _isDraggingBottomSlider = false;
                         _controller?.seekTo(Duration(milliseconds: val.toInt()));
+                        if (!(_controller?.value.isPlaying ?? true)) {
+                          _controller?.play();
+                        }
                         _startHideTimer();
                       },
                     ),
@@ -1464,7 +1562,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     child: Row(
                       children: [
                         Text(
-                          _formatDuration(pos),
+                          _formatDuration(_isDraggingBottomSlider
+                              ? Duration(milliseconds: _bottomSliderValue.toInt())
+                              : pos),
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         const Text(
@@ -1515,6 +1615,253 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             ),
 
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeekPreviewHud(Duration dur) {
+    final startSec = _seekStartPosition.inSeconds;
+    final targetSec = _seekTargetPosition.inSeconds;
+    final diffSec = targetSec - startSec;
+    final isForward = diffSec >= 0;
+    final diffAbs = diffSec.abs();
+    final diffStr = diffAbs >= 60
+        ? '${diffAbs ~/ 60}:${(diffAbs % 60).toString().padLeft(2, '0')}'
+        : '${diffAbs}s';
+
+    final totalMs = dur.inMilliseconds > 0 ? dur.inMilliseconds : 1;
+    final progress = (_seekTargetPosition.inMilliseconds / totalMs).clamp(0.0, 1.0);
+    final currentPos = _controller?.value.position ?? Duration.zero;
+    final currentProgress = (currentPos.inMilliseconds / totalMs).clamp(0.0, 1.0);
+
+    final currentEpisode = widget.anime.episodes.isNotEmpty &&
+            _currentEpisodeIndex >= 0 &&
+            _currentEpisodeIndex < widget.anime.episodes.length
+        ? widget.anime.episodes[_currentEpisodeIndex]
+        : null;
+    final thumbUrl = currentEpisode?.thumbnailUrl ?? widget.anime.coverUrl;
+
+    return Center(
+      child: AnimatedOpacity(
+        opacity: _showSeekPreview ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: 260,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xF0141824),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isForward ? AppTheme.accent.withOpacity(0.6) : Colors.amber.withOpacity(0.6),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.65),
+                blurRadius: 24,
+                spreadRadius: 2,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top thumbnail preview banner
+              if (thumbUrl.isNotEmpty) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    height: 80,
+                    width: double.infinity,
+                    color: Colors.black38,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: thumbUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(color: Colors.white10),
+                          errorWidget: (_, __, ___) => Container(color: Colors.white10),
+                        ),
+                        // Dark gradient scrim
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.transparent, Colors.black87],
+                            ),
+                          ),
+                        ),
+                        // Live indicator badge
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.white24, width: 0.8),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.play_circle_fill, size: 10, color: Colors.greenAccent),
+                                SizedBox(width: 4),
+                                Text(
+                                  'กำลังเล่นอยู่',
+                                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Centered timestamp overlay on thumbnail
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isForward ? AppTheme.accent : Colors.amber,
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              _formatDuration(_seekTargetPosition),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // Direction Icon and Seek Delta Badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    isForward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                    color: isForward ? AppTheme.accent : Colors.amber,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (isForward ? AppTheme.accent : Colors.amber).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: (isForward ? AppTheme.accent : Colors.amber).withOpacity(0.6),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      isForward ? '+$diffStr' : '-$diffStr',
+                      style: TextStyle(
+                        color: isForward ? AppTheme.accent : Colors.amber,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Target Timestamp vs Duration
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    _formatDuration(_seekTargetPosition),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '/ ${_formatDuration(dur)}',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Scrubber Progress Bar
+              Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  // Inactive track
+                  Container(
+                    height: 5,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                  // Current playback position marker
+                  FractionallySizedBox(
+                    widthFactor: currentProgress,
+                    child: Container(
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white38,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  // Seek target progress fill
+                  FractionallySizedBox(
+                    widthFactor: progress,
+                    child: Container(
+                      height: 5,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isForward
+                              ? [AppTheme.primary, AppTheme.accent]
+                              : [Colors.amber.shade700, Colors.amberAccent],
+                        ),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // Action hint
+              Text(
+                _isDraggingSeek ? 'ปล่อยเพื่อเล่นต่อจากจุดนี้' : 'กำลังข้ามไปยังช่วงที่เลือก...',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1682,6 +2029,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black38,
       builder: (_) {
         return Container(
           height: 380,
@@ -1861,6 +2209,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black38,
       builder: (_) {
         return Container(
           padding: const EdgeInsets.all(20),
