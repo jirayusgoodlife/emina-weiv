@@ -109,12 +109,12 @@ class PipService {
     }
   }
 
-  /// Set window brightness (0.01 to 1.0)
+  /// Set window brightness (0.001 to 1.0)
   static Future<void> setBrightness(double value) async {
     if (!Platform.isAndroid) return;
     try {
       await _channel.invokeMethod('setBrightness', {
-        'brightness': value.clamp(0.01, 1.0),
+        'brightness': value.clamp(0.001, 1.0),
       });
     } catch (e) {
       if (kDebugMode) print('[PipService] setBrightness error: $e');

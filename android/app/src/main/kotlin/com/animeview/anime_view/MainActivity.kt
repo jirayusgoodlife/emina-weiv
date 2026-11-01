@@ -153,7 +153,7 @@ class MainActivity : FlutterActivity() {
                 "setBrightness" -> {
                     val brightness = (call.argument<Double>("brightness") ?: 0.5).toFloat()
                     val lp = window.attributes
-                    lp.screenBrightness = brightness.coerceIn(0.01f, 1.0f)
+                    lp.screenBrightness = brightness.coerceIn(0.001f, 1.0f)
                     window.attributes = lp
                     result.success(true)
                 }

@@ -78,10 +78,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
     // Initial brightness and volume levels
     PipService.getBrightness().then((b) {
-      if (mounted) _currentBrightness = b;
+      if (mounted) {
+        setState(() {
+          _currentBrightness = b;
+        });
+      }
     });
     PipService.getVolume().then((v) {
-      if (mounted) _currentVolume = v;
+      if (mounted) {
+        setState(() {
+          _currentVolume = v;
+        });
+      }
     });
 
     // Follow the real device orientation (unless auto-rotate is turned off in settings)
@@ -195,13 +203,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final delta = -details.delta.dy / (height * 0.6);
 
     if (_isDraggingBrightness) {
-      _currentBrightness = (_currentBrightness + delta).clamp(0.01, 1.0);
-      PipService.setBrightness(_currentBrightness);
-      setState(() {});
+      _updateBrightness((_currentBrightness + delta).clamp(0.0, 1.0));
     } else if (_isDraggingVolume) {
-      _currentVolume = (_currentVolume + delta).clamp(0.0, 1.0);
-      PipService.setVolume(_currentVolume);
-      setState(() {});
+      _updateVolume((_currentVolume + delta).clamp(0.0, 1.0));
     }
   }
 
@@ -209,7 +213,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _isDraggingBrightness = false;
     _isDraggingVolume = false;
     _indicatorHideTimer?.cancel();
-    _indicatorHideTimer = Timer(const Duration(milliseconds: 1000), () {
+    _indicatorHideTimer = Timer(const Duration(milliseconds: 1200), () {
       if (mounted) {
         setState(() {
           _showBrightnessIndicator = false;
@@ -219,15 +223,37 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     });
   }
 
+  /// Extra dimming overlay opacity when brightness is set below 30% down to 0%
+  /// allows ultra-low, soothing night viewing in pitch-dark rooms.
+  double get _dimOverlayOpacity {
+    if (_currentBrightness >= 0.30) return 0.0;
+    return ((0.30 - _currentBrightness) / 0.30 * 0.85).clamp(0.0, 0.85);
+  }
+
+  void _updateBrightness(double val) {
+    _currentBrightness = val.clamp(0.0, 1.0);
+    final hwBrightness = _currentBrightness.clamp(0.001, 1.0);
+    PipService.setBrightness(hwBrightness);
+    setState(() {});
+  }
+
+  void _updateVolume(double val) {
+    _currentVolume = val.clamp(0.0, 1.0);
+    PipService.setVolume(_currentVolume);
+    setState(() {});
+  }
+
   IconData get _brightnessIcon {
-    if (_currentBrightness < 0.3) return Icons.brightness_low;
-    if (_currentBrightness < 0.7) return Icons.brightness_medium;
+    if (_currentBrightness <= 0.05) return Icons.bedtime;
+    if (_currentBrightness < 0.35) return Icons.brightness_low;
+    if (_currentBrightness < 0.70) return Icons.brightness_medium;
     return Icons.brightness_high;
   }
 
   IconData get _volumeIcon {
     if (_currentVolume <= 0.01) return Icons.volume_off;
-    if (_currentVolume < 0.5) return Icons.volume_down;
+    if (_currentVolume < 0.35) return Icons.volume_mute;
+    if (_currentVolume < 0.70) return Icons.volume_down;
     return Icons.volume_up;
   }
 
@@ -785,6 +811,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
+    final screenSize = MediaQuery.of(context).size;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape ||
+        screenSize.width > 600;
     final dur = _controller?.value.duration ?? Duration.zero;
     final pos = _controller?.value.position ?? Duration.zero;
     final remainingSeconds = dur.inSeconds - pos.inSeconds;
@@ -879,6 +908,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       )
                     : const SizedBox.shrink(),
               ),
+
+              // Software Extra-Dim Overlay (for ultra-low brightness in pitch-dark rooms)
+              if (_dimOverlayOpacity > 0.0)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      color: Colors.black.withOpacity(_dimOverlayOpacity),
+                    ),
+                  ),
+                ),
 
               // Loading Indicator
               if (_isLoading)
@@ -1049,6 +1088,44 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // Custom Controls Overlay
               if (_showControls && !_isLoading && _errorMessage == null)
                 _buildControlsOverlay(pos, dur),
+
+              // Left Slider (Brightness) with Scale & Numbers
+              if ((_showBrightnessIndicator || (_showControls && isLandscape)) &&
+                  !_isLoading &&
+                  _errorMessage == null &&
+                  !_isPipMode)
+                _buildVerticalSliderHud(
+                  isLeft: true,
+                  icon: _brightnessIcon,
+                  value: _currentBrightness,
+                  label: 'ความสว่าง',
+                  activeColor: Colors.amber,
+                  gradientColors: [Colors.amber.shade700, Colors.amberAccent],
+                  isDragging: _isDraggingBrightness,
+                  onChanged: (newVal) {
+                    _updateBrightness(newVal);
+                    _startHideTimer();
+                  },
+                ),
+
+              // Right Slider (Volume) with Scale & Numbers
+              if ((_showVolumeIndicator || (_showControls && isLandscape)) &&
+                  !_isLoading &&
+                  _errorMessage == null &&
+                  !_isPipMode)
+                _buildVerticalSliderHud(
+                  isLeft: false,
+                  icon: _volumeIcon,
+                  value: _currentVolume,
+                  label: 'ระดับเสียง',
+                  activeColor: AppTheme.accent,
+                  gradientColors: [AppTheme.primary, AppTheme.accent],
+                  isDragging: _isDraggingVolume,
+                  onChanged: (newVal) {
+                    _updateVolume(newVal);
+                    _startHideTimer();
+                  },
+                ),
             ],
           ),
         ),
@@ -1437,93 +1514,161 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               ),
             ),
 
-            // Brightness & Volume Gesture HUD Overlays
-            if (_showBrightnessIndicator)
-              _buildGestureIndicator(
-                isLeft: true,
-                icon: _brightnessIcon,
-                value: _currentBrightness,
-                label: 'ความสว่าง',
-              ),
-            if (_showVolumeIndicator)
-              _buildGestureIndicator(
-                isLeft: false,
-                icon: _volumeIcon,
-                value: _currentVolume,
-                label: 'ระดับเสียง',
-              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildGestureIndicator({
+  Widget _buildVerticalSliderHud({
     required bool isLeft,
     required IconData icon,
     required double value,
     required String label,
+    required Color activeColor,
+    required List<Color> gradientColors,
+    required bool isDragging,
+    required Function(double) onChanged,
   }) {
     final percent = (value * 100).round();
+    const trackHeight = 116.0;
+
     return Positioned(
       top: 0,
       bottom: 0,
-      left: isLeft ? 36 : null,
-      right: isLeft ? null : 36,
-      child: Center(
-        child: Container(
-          width: 52,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-          decoration: BoxDecoration(
-            color: const Color(0xE6141824),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: Colors.white12, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 24),
-              const SizedBox(height: 12),
-              Container(
-                height: 100,
-                width: 6,
+      left: isLeft ? 24 : null,
+      right: isLeft ? null : 24,
+      child: SafeArea(
+        child: Center(
+          child: AnimatedOpacity(
+            opacity: 1.0,
+            duration: const Duration(milliseconds: 200),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 66,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(3),
+                  color: const Color(0xEB141824),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isDragging ? activeColor.withOpacity(0.65) : Colors.white12,
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.55),
+                      blurRadius: 18,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        height: constraints.maxHeight * value.clamp(0.0, 1.0),
-                        width: 6,
-                        decoration: BoxDecoration(
-                          color: isLeft ? Colors.amber : AppTheme.primary,
-                          borderRadius: BorderRadius.circular(3),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Dynamic Icon
+                    Icon(icon, color: activeColor, size: 22),
+                    const SizedBox(height: 4),
+
+                    // Label (ความสว่าง / ระดับเสียง)
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+
+                    // Numerical Display (e.g. 85%)
+                    Text(
+                      '$percent%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+
+                    // Extra hint badge for 0%
+                    if (isLeft && percent == 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          'ต่ำสุด',
+                          style: TextStyle(
+                            color: Colors.amber.shade200,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    else if (!isLeft && percent == 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          'ปิดเสียง',
+                          style: TextStyle(
+                            color: Colors.redAccent.shade100,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    );
-                  },
+
+                    const SizedBox(height: 8),
+
+                    // Interactive Scale Track with Graduation Ticks & Numbers
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onVerticalDragStart: (_) {
+                        _indicatorHideTimer?.cancel();
+                        setState(() {
+                          if (isLeft) {
+                            _isDraggingBrightness = true;
+                            _showBrightnessIndicator = true;
+                          } else {
+                            _isDraggingVolume = true;
+                            _showVolumeIndicator = true;
+                          }
+                        });
+                      },
+                      onVerticalDragUpdate: (details) {
+                        const trackTop = 8.0;
+                        const effectiveHeight = trackHeight - 16.0;
+                        final localY = (details.localPosition.dy - trackTop).clamp(0.0, effectiveHeight);
+                        final newVal = 1.0 - (localY / effectiveHeight);
+                        onChanged(newVal);
+                      },
+                      onVerticalDragEnd: (details) {
+                        _onVerticalDragEnd(details);
+                      },
+                      onTapDown: (details) {
+                        const trackTop = 8.0;
+                        const effectiveHeight = trackHeight - 16.0;
+                        final localY = (details.localPosition.dy - trackTop).clamp(0.0, effectiveHeight);
+                        final newVal = 1.0 - (localY / effectiveHeight);
+                        onChanged(newVal);
+                      },
+                      child: SizedBox(
+                        width: 42,
+                        height: trackHeight,
+                        child: CustomPaint(
+                          painter: ScaleSliderTrackPainter(
+                            value: value,
+                            activeColor: activeColor,
+                            gradientColors: gradientColors,
+                            isLeft: isLeft,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                '$percent%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1792,5 +1937,137 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         );
       },
     );
+  }
+}
+
+/// Custom painter for vertical slider track with real graduation ticks and scale markings (0, 25, 50, 75, 100)
+class ScaleSliderTrackPainter extends CustomPainter {
+  final double value; // 0.0 to 1.0
+  final Color activeColor;
+  final List<Color> gradientColors;
+  final bool isLeft;
+
+  ScaleSliderTrackPainter({
+    required this.value,
+    required this.activeColor,
+    required this.gradientColors,
+    required this.isLeft,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const trackTop = 8.0;
+    final effectiveHeight = size.height - 16.0;
+    const trackLeft = 3.0;
+    const trackWidth = 6.0;
+    const trackRadius = Radius.circular(3.0);
+
+    // 1. Inactive track background
+    final bgRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(trackLeft, trackTop, trackWidth, effectiveHeight),
+      trackRadius,
+    );
+    final bgPaint = Paint()
+      ..color = Colors.white.withOpacity(0.18)
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(bgRect, bgPaint);
+
+    // 2. Active track fill (from bottom up)
+    final clampedValue = value.clamp(0.0, 1.0);
+    final fillHeight = effectiveHeight * clampedValue;
+    if (fillHeight > 0) {
+      final fillRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          trackLeft,
+          trackTop + effectiveHeight - fillHeight,
+          trackWidth,
+          fillHeight,
+        ),
+        trackRadius,
+      );
+      final gradientPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: gradientColors,
+        ).createShader(Rect.fromLTWH(trackLeft, trackTop, trackWidth, effectiveHeight))
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(fillRect, gradientPaint);
+    }
+
+    // 3. Thumb Knob
+    final thumbY = trackTop + effectiveHeight - (effectiveHeight * clampedValue);
+    final thumbCenter = Offset(trackLeft + trackWidth / 2, thumbY);
+
+    // Glow
+    final glowPaint = Paint()
+      ..color = activeColor.withOpacity(0.5)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(thumbCenter, 6.0, glowPaint);
+
+    // Solid thumb
+    final thumbPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(thumbCenter, 4.0, thumbPaint);
+
+    final thumbBorderPaint = Paint()
+      ..color = activeColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawCircle(thumbCenter, 4.0, thumbBorderPaint);
+
+    // 4. Scale Graduations (Ticks and Numbers: 100, 75, 50, 25, 0)
+    const tickStartX = trackLeft + trackWidth + 4.0;
+    const scaleSteps = [1.0, 0.75, 0.50, 0.25, 0.0];
+    final tickPaint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    for (final step in scaleSteps) {
+      final y = trackTop + effectiveHeight - (effectiveHeight * step);
+      final isMajor = (step == 1.0 || step == 0.50 || step == 0.0);
+      final tickLength = isMajor ? 5.0 : 3.5;
+      final isNear = (clampedValue - step).abs() < 0.12;
+
+      tickPaint.color = isNear
+          ? activeColor
+          : (isMajor ? Colors.white.withOpacity(0.65) : Colors.white.withOpacity(0.3));
+      tickPaint.strokeWidth = isMajor ? 1.5 : 1.0;
+
+      canvas.drawLine(
+        Offset(tickStartX, y),
+        Offset(tickStartX + tickLength, y),
+        tickPaint,
+      );
+
+      // Label text (100, 75, 50, 25, 0)
+      final labelText = '${(step * 100).toInt()}';
+      final textSpan = TextSpan(
+        text: labelText,
+        style: TextStyle(
+          color: isNear
+              ? activeColor
+              : (isMajor ? Colors.white.withOpacity(0.85) : Colors.white.withOpacity(0.45)),
+          fontSize: 8.5,
+          fontWeight: isMajor ? FontWeight.bold : FontWeight.w500,
+          letterSpacing: -0.2,
+        ),
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      textPainter.paint(
+        canvas,
+        Offset(tickStartX + tickLength + 3.0, y - textPainter.height / 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ScaleSliderTrackPainter oldDelegate) {
+    return oldDelegate.value != value ||
+        oldDelegate.activeColor != activeColor ||
+        oldDelegate.isLeft != isLeft;
   }
 }
