@@ -31,5 +31,11 @@ void main() {
 
       expect(asset.formattedSize, '');
     });
+
+    test('updateAvailable notifier and latestGitHubVersion state properties exist', () {
+      final service = UpdateService.instance;
+      expect(service.updateAvailable, isNotNull);
+      expect(service.latestGitHubVersion, anyOf(isNull, isA<String>()));
+    });
   });
 }

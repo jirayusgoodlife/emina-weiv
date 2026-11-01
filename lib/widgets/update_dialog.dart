@@ -21,6 +21,7 @@ class UpdateDialog extends StatefulWidget {
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (_) => UpdateDialog(
         releaseInfo: releaseInfo,
         currentVersion: currentVersion,

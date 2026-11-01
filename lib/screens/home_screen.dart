@@ -48,6 +48,57 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _checkUpdateManually() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.accent,
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('กำลังตรวจสอบเวอร์ชันล่าสุด...'),
+          ],
+        ),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    final versionInfo = await UpdateService.instance.getCurrentAppVersion();
+    final currentVersion = versionInfo['versionName'] as String? ?? '1.0.0';
+    final release = await UpdateService.instance
+        .checkForUpdate(currentVersion: currentVersion);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (release != null) {
+      UpdateDialog.show(
+        context,
+        releaseInfo: release,
+        currentVersion: currentVersion,
+      );
+    } else {
+      final latest = UpdateService.instance.latestGitHubVersion ?? currentVersion;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว\n(เวอร์ชันปัจจุบัน: v$currentVersion | ล่าสุดบน GitHub: v$latest)',
+          ),
+          backgroundColor: Colors.green.shade800,
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AnimeCatalogProvider>(context);
@@ -59,6 +110,43 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
+        leading: Builder(
+          builder: (scaffoldCtx) => Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu, color: AppTheme.textMain),
+                tooltip: 'เมนู',
+                onPressed: () => Scaffold.of(scaffoldCtx).openDrawer(),
+              ),
+              ValueListenableBuilder<AppReleaseInfo?>(
+                valueListenable: UpdateService.instance.updateAvailable,
+                builder: (context, release, _) {
+                  if (release == null) return const SizedBox.shrink();
+                  return Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.amber,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.amber.withOpacity(0.8),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
         title: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
@@ -85,7 +173,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      drawer: _AppDrawer(provider: provider),
+      drawer: _AppDrawer(
+        provider: provider,
+        onCheckUpdate: _checkUpdateManually,
+      ),
       body: provider.isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppTheme.primary),
@@ -684,8 +775,13 @@ class _HomeScreenState extends State<HomeScreen> {
 /// เมนู hamburger - รวมการกระทำทั้งหมดของหน้าโฮม (ยกเว้นปุ่มค้นหาที่อยู่นอกเมนู)
 class _AppDrawer extends StatelessWidget {
   final AnimeCatalogProvider provider;
+  final VoidCallback onCheckUpdate;
 
-  const _AppDrawer({Key? key, required this.provider}) : super(key: key);
+  const _AppDrawer({
+    Key? key,
+    required this.provider,
+    required this.onCheckUpdate,
+  }) : super(key: key);
 
   static const TextStyle _tileStyle = TextStyle(
     color: AppTheme.textMain,
@@ -870,24 +966,97 @@ class _AppDrawer extends StatelessWidget {
             ),
 
             // Check Update
-            ListTile(
-              leading:
-                  const Icon(Icons.system_update_alt, color: AppTheme.accent),
-              title: const Text('ตรวจสอบการอัปเดต', style: _tileStyle),
-              subtitle: FutureBuilder<Map<String, dynamic>>(
-                future: UpdateService.instance.getCurrentAppVersion(),
-                builder: (context, snapshot) {
-                  final v = snapshot.data?['versionName'] ?? '1.0.0';
-                  return Text(
-                    'เวอร์ชันปัจจุบัน: v$v',
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 11),
-                  );
-                },
-              ),
-              onTap: () {
-                Navigator.of(context).pop();
-                _checkUpdateManually(context);
+            ValueListenableBuilder<AppReleaseInfo?>(
+              valueListenable: UpdateService.instance.updateAvailable,
+              builder: (context, update, _) {
+                final hasUpdate = update != null;
+                final latest = UpdateService.instance.latestGitHubVersion;
+
+                return ListTile(
+                  leading: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.system_update_alt, color: AppTheme.accent),
+                      if (hasUpdate)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: Colors.amber,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.amber.withOpacity(0.8),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Row(
+                    children: [
+                      const Text('ตรวจสอบการอัปเดต', style: _tileStyle),
+                      if (hasUpdate) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade700,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Text(
+                            'มีอัปเดต',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  subtitle: FutureBuilder<Map<String, dynamic>>(
+                    future: UpdateService.instance.getCurrentAppVersion(),
+                    builder: (context, snapshot) {
+                      final v = snapshot.data?['versionName'] ?? '1.0.0';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'เวอร์ชันปัจจุบัน: v$v',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (latest != null)
+                            Text(
+                              'ล่าสุดบน GitHub: v$latest',
+                              style: TextStyle(
+                                color: hasUpdate
+                                    ? Colors.amber.shade300
+                                    : Colors.white38,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onCheckUpdate();
+                  },
+                );
               },
             ),
 
@@ -902,52 +1071,5 @@ class _AppDrawer extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _checkUpdateManually(BuildContext context) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Row(
-          children: [
-            SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.accent,
-              ),
-            ),
-            SizedBox(width: 12),
-            Text('กำลังตรวจสอบเวอร์ชันล่าสุด...'),
-          ],
-        ),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    final versionInfo = await UpdateService.instance.getCurrentAppVersion();
-    final currentVersion = versionInfo['versionName'] as String? ?? '1.0.0';
-    final release = await UpdateService.instance
-        .checkForUpdate(currentVersion: currentVersion);
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    if (release != null) {
-      UpdateDialog.show(
-        context,
-        releaseInfo: release,
-        currentVersion: currentVersion,
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว (v$currentVersion)'),
-          backgroundColor: Colors.green.shade800,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 }

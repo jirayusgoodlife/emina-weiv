@@ -7,13 +7,25 @@ import '../theme/app_theme.dart';
 
 /// หน้าต่างตั้งค่าของแอป (เปิดจากหน้าแรก หรือจากเครื่องเล่นวิดีโอ)
 class AppSettingsSheet {
-  static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+  static Future<void> show(BuildContext context) async {
+    final result = await showModalBottomSheet<AppReleaseInfo>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => const _AppSettingsSheet(),
     );
+
+    if (result != null && context.mounted) {
+      final versionInfo = await UpdateService.instance.getCurrentAppVersion();
+      final currentVersion = versionInfo['versionName'] as String? ?? '1.0.0';
+      if (context.mounted) {
+        UpdateDialog.show(
+          context,
+          releaseInfo: result,
+          currentVersion: currentVersion,
+        );
+      }
+    }
   }
 }
 
@@ -245,18 +257,20 @@ class _AppUpdateSectionState extends State<_AppUpdateSection> {
     if (!mounted) return;
     setState(() => _isChecking = false);
 
+    final latestVer = UpdateService.instance.latestGitHubVersion ?? currentVersion;
+
     if (release != null) {
-      Navigator.of(context).pop(); // Close settings sheet
-      UpdateDialog.show(
-        context,
-        releaseInfo: release,
-        currentVersion: currentVersion,
-      );
+      if (!mounted) return;
+      Navigator.of(context).pop(release);
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว (v$currentVersion)'),
+          content: Text(
+            'คุณกำลังใช้งานเวอร์ชันล่าสุดแล้ว\n(เวอร์ชันปัจจุบัน: v$currentVersion | ล่าสุดบน GitHub: v$latestVer)',
+          ),
           backgroundColor: Colors.green.shade800,
+          duration: const Duration(seconds: 3),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -265,83 +279,172 @@ class _AppUpdateSectionState extends State<_AppUpdateSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'การอัปเดตแอปพลิเคชัน',
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              FutureBuilder<Map<String, dynamic>>(
-                future: UpdateService.instance.getCurrentAppVersion(),
-                builder: (context, snapshot) {
-                  final v = snapshot.data?['versionName'] ?? '1.0.0';
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Emina Weiv (AnimeView)',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'เวอร์ชันปัจจุบัน: v$v',
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              ElevatedButton(
-                onPressed: _isChecking ? null : _checkUpdate,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accent,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+    return ValueListenableBuilder<AppReleaseInfo?>(
+      valueListenable: UpdateService.instance.updateAvailable,
+      builder: (context, update, _) {
+        final hasUpdate = update != null;
+        final latestGitHub = UpdateService.instance.latestGitHubVersion;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'การอัปเดตแอปพลิเคชัน',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                child: _isChecking
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black,
+                if (hasUpdate) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withOpacity(0.4),
+                          blurRadius: 6,
                         ),
-                      )
-                    : const Text(
-                        'ตรวจสอบ',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.fiber_manual_record, size: 7, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'มีอัปเดตใหม่',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: hasUpdate ? Colors.amber.withOpacity(0.08) : Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: hasUpdate ? Colors.amber.withOpacity(0.4) : Colors.white10,
+                  width: hasUpdate ? 1.2 : 1.0,
+                ),
               ),
-            ],
-          ),
-        ),
-      ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: FutureBuilder<Map<String, dynamic>>(
+                      future: UpdateService.instance.getCurrentAppVersion(),
+                      builder: (context, snapshot) {
+                        final v = snapshot.data?['versionName'] ?? '1.0.0';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  'Emina Weiv',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (hasUpdate) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.accent,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'NEW',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'เวอร์ชันปัจจุบัน: v$v',
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                            if (latestGitHub != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1),
+                                child: Text(
+                                  hasUpdate
+                                      ? 'ล่าสุดบน GitHub: v$latestGitHub (มีเวอร์ชันใหม่!)'
+                                      : 'ล่าสุดบน GitHub: v$latestGitHub (เวอร์ชันล่าสุดแล้ว)',
+                                  style: TextStyle(
+                                    color: hasUpdate ? Colors.amber.shade300 : Colors.greenAccent.shade200,
+                                    fontSize: 11,
+                                    fontWeight: hasUpdate ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: _isChecking ? null : _checkUpdate,
+                    icon: _isChecking
+                        ? const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.black,
+                            ),
+                          )
+                        : Icon(
+                            hasUpdate ? Icons.system_update_rounded : Icons.refresh,
+                            size: 15,
+                          ),
+                    label: Text(
+                      hasUpdate ? 'อัปเดตเลย' : 'ตรวจสอบ',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: hasUpdate ? Colors.amber : AppTheme.accent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

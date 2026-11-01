@@ -52,6 +52,13 @@ class UpdateService {
   static final UpdateService instance = UpdateService._();
   UpdateService._();
 
+  /// Notification notifier that emits when an update is available (or null if up to date)
+  final ValueNotifier<AppReleaseInfo?> updateAvailable =
+      ValueNotifier<AppReleaseInfo?>(null);
+
+  /// The latest version string discovered from GitHub Releases (e.g. '1.1.2')
+  String? latestGitHubVersion;
+
   /// Retrieve current running app version and code
   Future<Map<String, dynamic>> getCurrentAppVersion() async {
     try {
@@ -122,9 +129,10 @@ class UpdateService {
 
       final cleanLatestVersion = _cleanVersion(tagName);
       final cleanCurrentVersion = _cleanVersion(current);
+      latestGitHubVersion = cleanLatestVersion;
 
       if (_isVersionNewer(cleanLatestVersion, cleanCurrentVersion)) {
-        return AppReleaseInfo(
+        final release = AppReleaseInfo(
           tagName: tagName,
           version: cleanLatestVersion,
           title: title,
@@ -132,8 +140,11 @@ class UpdateService {
           apkAsset: apkAsset,
           publishedAt: publishedAt,
         );
+        updateAvailable.value = release;
+        return release;
       }
 
+      updateAvailable.value = null;
       return null;
     } catch (e) {
       debugPrint('Error checking for update: $e');
