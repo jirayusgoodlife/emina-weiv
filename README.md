@@ -115,7 +115,19 @@
   # Output file located at: build/app/outputs/flutter-apk/app-release.apk
   ```
 
-#### B. Sync Your Library
+#### B. Automated Version Bump & GitHub Release
+A helper script [`release.sh`](file:///home/jirayus/Projects/emina-weiv/release.sh) is provided to automate version bumping, testing, building APK, git tagging, and GitHub Releases:
+```bash
+# Interactive mode (prompts for patch, minor, or major bump):
+./release.sh
+
+# Or directly specify bump type:
+./release.sh patch   # e.g., 1.0.1 -> 1.0.2
+./release.sh minor   # e.g., 1.0.1 -> 1.1.0
+./release.sh major   # e.g., 1.0.1 -> 2.0.0
+```
+
+#### C. Sync Your Library
 1. Make sure your phone and your computer running the server are connected to the **same Wi-Fi / Local Network**.
 2. Open the **Anime Studio** web UI on your computer and switch to the **"Sync & Mobile"** tab to view your server's QR code.
 3. On your Android app:
