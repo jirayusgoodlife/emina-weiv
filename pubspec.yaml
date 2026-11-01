@@ -1,7 +1,7 @@
 name: anime_view
 description: "A modern Anime viewing app with local sync"
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -16,7 +16,7 @@ dependencies:
   http: ^1.2.2
   isar_community: ^3.4.1
   isar_community_flutter_libs: ^3.4.1
-  mobile_scanner: ^6.0.4
+  mobile_scanner: ^7.4.2
   path_provider: ^2.1.5
   provider: ^6.1.2
   shared_preferences: ^2.3.3

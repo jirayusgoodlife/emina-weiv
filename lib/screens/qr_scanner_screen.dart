@@ -203,7 +203,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       case MobileScannerErrorCode.controllerAlreadyInitialized:
       case MobileScannerErrorCode.controllerDisposed:
       case MobileScannerErrorCode.controllerUninitialized:
+      case MobileScannerErrorCode.controllerInitializing:
       case MobileScannerErrorCode.genericError:
+      default:
         message = 'เกิดข้อผิดพลาดในการเปิดกล้อง';
         hint = error.errorDetails?.message ?? 'กรุณาลองใหม่อีกครั้ง หรือเลือกกรอก IP ด้วยตนเองด้านล่าง';
         break;
@@ -341,7 +343,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           MobileScanner(
             controller: _controller,
             onDetect: _onDetect,
-            errorBuilder: (context, error, child) {
+            errorBuilder: (context, error) {
               return _buildErrorWidget(error);
             },
           ),
