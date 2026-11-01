@@ -1,0 +1,61 @@
+name: anime_view
+description: "A modern Anime viewing app with local sync"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cached_network_image: ^3.4.1
+  chewie: ^1.8.8
+  cupertino_icons: ^1.0.8
+  dio: ^5.7.0
+  http: ^1.2.2
+  isar_community: ^3.4.1
+  isar_community_flutter_libs: ^3.4.1
+  mobile_scanner: ^6.0.4
+  path_provider: ^2.1.5
+  provider: ^6.1.2
+  shared_preferences: ^2.3.3
+  video_player: ^2.9.2
+  wakelock_plus: ^1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.13
+  isar_community_generator: ^3.4.1
+
+dependency_overrides:
+  video_player_android:
+    path: ./plugins/video_player_android
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: GoogleSans
+      fonts:
+        - asset: assets/fonts/GoogleSans-Regular.ttf
+        - asset: assets/fonts/GoogleSans-Italic.ttf
+          style: italic
+        - asset: assets/fonts/GoogleSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/GoogleSans-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/GoogleSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/GoogleSans-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/fonts/GoogleSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/GoogleSans-BoldItalic.ttf
+          weight: 700
+          style: italic
+

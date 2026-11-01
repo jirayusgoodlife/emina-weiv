@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anime Studio - AI Scraper & Catalog Server</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.8/hls.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0d14;
+      --card-bg: rgba(22, 27, 38, 0.85);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #ff2a6d;
+      --primary-glow: rgba(255, 42, 109, 0.35);
+      --accent: #05d9e8;
+      --accent-glow: rgba(5, 217, 232, 0.3);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --input-bg: #111522;
+      --success: #00e676;
+      --warning: #ffab00;
+      --danger: #ff1744;
+      --radius: 14px;
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', 'Noto Sans Thai', sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(255, 42, 109, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(5, 217, 232, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* Header & Navigation */
+    header {
+      background: rgba(10, 13, 20, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0 2rem;
+    }
+
+    .header-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: 0.5px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, var(--primary), #9c27b0);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: rgba(255, 42, 109, 0.15);
+      border: 1px solid rgba(255, 42, 109, 0.4);
+      box-shadow: 0 0 12px rgba(255, 42, 109, 0.2);
+    }
+
+    .sync-status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 230, 118, 0.1);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      color: var(--success);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards & Containers */
+    .glass-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      padding: 1.8rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      margin-bottom: 2rem;
+    }
+
+    .section-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-subtitle {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Inputs & Forms */
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"], input[type="number"], textarea, select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 12px 16px;
+      transition: var(--transition);
+      outline: none;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 600;
+      padding: 12px 22px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #e91e63);
+      color: white;
+      box-shadow: 0 4px 18px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px var(--primary-glow);
+    }
+
+    .btn-accent {
+      background: linear-gradient(135deg, var(--accent), #0288d1);
+      color: #031525;
+      font-weight: 700;
+      box-shadow: 0 4px 18px var(--accent-glow);
+    }
+
+    .btn-accent:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px var(--accent-glow);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-danger {
+      background: rgba(255, 23, 68, 0.15);
+      border: 1px solid rgba(255, 23, 68, 0.3);
+      color: var(--danger);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    /* Extract Preview Layout */
+    .preview-grid {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 2rem;
+      margin-top: 1.5rem;
+    }
+
+    .poster-preview {
+      width: 100%;
+      height: 390px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: #111522;
+      border: 1px solid var(--card-border);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Episode Table */
+    .episodes-table-wrapper {
+      max-height: 480px;
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: #111522;
+      padding: 12px 16px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.5px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    td {
+      padding: 10px 16px;
+      border-top: 1px solid var(--card-border);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Anime Catalog Grid */
+    .anime-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.8rem;
+    }
+
+    .anime-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .anime-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6);
+      border-color: rgba(255, 42, 109, 0.4);
+    }
+
+    .anime-poster-box {
+      position: relative;
+      width: 100%;
+      padding-top: 145%;
+      background: #111522;
+      overflow: hidden;
+    }
+
+    .anime-poster-img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s ease;
+    }
+
+    .anime-card:hover .anime-poster-img {
+      transform: scale(1.05);
+    }
+
+    .anime-ep-badge {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(5, 217, 232, 0.3);
+    }
+
+    .anime-info {
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .anime-card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .anime-genres {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .genre-tag {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .anime-actions {
+      margin-top: auto;
+      display: flex;
+      gap: 6px;
+    }
+
+    /* Sync Screen Styles */
+    .sync-hero-card {
+      text-align: center;
+      padding: 3rem 2rem;
+      background: radial-gradient(circle at center, rgba(5, 217, 232, 0.1) 0%, transparent 70%), var(--card-bg);
+      border: 1px solid var(--accent-glow);
+    }
+
+    .ip-display-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      background: #0f1422;
+      border: 1px solid var(--accent);
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 1.5rem 0;
+      box-shadow: 0 0 25px var(--accent-glow);
+    }
+
+    .qr-container {
+      margin: 1.5rem auto;
+      padding: 20px;
+      background: #0f1422;
+      border: 1px solid var(--accent-glow);
+      border-radius: 16px;
+      display: inline-block;
+      box-shadow: 0 0 30px rgba(5, 217, 232, 0.15);
+      text-align: center;
+    }
+
+    #qrcodeBox {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    #qrcodeBox img, #qrcodeBox canvas {
+      border-radius: 8px;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #131722;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 900px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    }
+
+    .modal-header {
+      padding: 1.2rem 1.8rem;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-body {
+      padding: 1.8rem;
+      overflow-y: auto;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e2536;
+      border: 1px solid var(--card-border);
+      padding: 12px 20px;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 2000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .toast.error {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+
+    /* Loading Spinner */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-badge">AI Studio</span>
+        <span>AnimeView Backend</span>
+      </div>
+
+      <nav class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('extractor')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          ดึงข้อมูลด้วย AI
+        </button>
+        <button class="tab-btn" onclick="switchTab('catalog')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+          แคตตาล็อกหนัง (<span id="catalogCount">0</span>)
+        </button>
+        <button class="tab-btn" onclick="switchTab('sync')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          ซิงค์กับ Flutter
+        </button>
+        <button class="tab-btn" onclick="switchTab('settings')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          ตั้งค่า Local LLM
+        </button>
+      </nav>
+
+      <div class="sync-status-badge">
+        <span class="status-dot"></span>
+        <span>Local Server Ready</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Body -->
+  <main>
+    <!-- TAB 1: AI Scraper Studio -->
+    <section id="tab-extractor" class="tab-panel active">
+      <div class="glass-card">
+        <div class="section-header" style="margin-bottom: 1rem;">
+          <h2 class="section-title">ใส่ลิงก์เว็บที่ต้องการดู และให้ Local LLM ดึงตอน</h2>
+          <p class="section-subtitle">ระบบจะดาวน์โหลดหน้าเว็บ ส่งข้อความให้ Local LLM (Ollama / LM Studio) วิเคราะห์ชื่อเรื่อง รูปปก เรื่องย่อ และรายการตอนทั้งหมด</p>
+        </div>
+
+        <!-- Mode Selector Buttons -->
+        <div style="display: flex; gap: 10px; margin-bottom: 1.25rem;">
+          <button type="button" id="modeSingleBtn" class="btn btn-outline" style="background: rgba(255, 23, 68, 0.15); border-color: var(--primary); color: white;" onclick="switchExtractorMode('single')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            โหมด URL เดี่ยว (Single URL)
+          </button>
+          <button type="button" id="modeBatchBtn" class="btn btn-outline" onclick="switchExtractorMode('batch')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            โหมดหลายเรื่องพร้อมกัน (Batch Queue)
+          </button>
+        </div>
+
+        <!-- Single URL Mode -->
+        <div id="singleModeSection">
+          <div class="input-row">
+            <input type="text" id="targetUrl" placeholder="วาง URL เว็บดูหนังหรืออนิเมะ เช่น https://anifume.com/40235 หรือ https://anime-waku.com/..." />
+            <button id="extractBtn" class="btn btn-primary" onclick="startExtraction()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              วิเคราะห์ด้วย AI
+            </button>
+          </div>
+          <div style="margin-top: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="singleAutoSave" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary);" />
+              <label for="singleAutoSave" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.9rem; color: var(--text);">
+                บันทึกเข้าแคตตาล็อกอัตโนมัติทันทีหลังวิเคราะห์เสร็จ (Auto Save)
+              </label>
+            </div>
+          </div>
+
+          <!-- AI Live Thinking & Progress Box -->
+          <div id="aiThinkingCard" style="display: none; margin-top: 14px; border-radius: 10px; background: #070a13; border: 1px solid rgba(99, 102, 241, 0.35); overflow: hidden;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #6366f1; box-shadow: 0 0 8px #6366f1; display: inline-block;"></span>
+                <span style="font-size: 0.85rem; font-weight: 600; color: #e2e8f0;">🧠 กระบวนการคิดและการทำงานของ AI (Live Thinking)</span>
+              </div>
+              <button type="button" class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75rem;" onclick="clearThinkingLogs()">ล้างข้อความ</button>
+            </div>
+            <div id="aiThinkingBox" style="max-height: 220px; min-height: 70px; overflow-y: auto; padding: 12px 14px; font-family: 'Fira Code', monospace; font-size: 0.82rem; line-height: 1.5; color: #94a3b8; white-space: pre-wrap; word-break: break-word;"></div>
+          </div>
+        </div>
+
+        <!-- Batch Queue Mode -->
+        <div id="batchModeSection" style="display: none;">
+          <div class="form-group" style="margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <label style="margin: 0; font-size: 0.88rem;">รายการลิงก์เว็บที่ต้องการดึง (วางได้หลายเรื่อง บรรทัดละ 1 ลิงก์):</label>
+              <span id="batchUrlCountBadge" style="font-size: 0.82rem; padding: 3px 12px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);">0 เรื่อง</span>
+            </div>
+            <textarea id="batchUrls" rows="6" placeholder="วางลิงก์ที่นี่ บรรทัดละ 1 เรื่อง เช่น&#10;https://anifume.com/40235&#10;https://anime-waku.com/movies/chainsaw-man-movie-reze-hen/&#10;https://anifume.com/41771&#10;https://anime-waku.com/anime/frieren-sub/" style="resize: vertical; font-family: monospace; font-size: 0.9rem; line-height: 1.5; padding: 12px;" oninput="updateBatchUrlCount()"></textarea>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="batchAutoSave" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);" />
+              <label for="batchAutoSave" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.92rem; color: var(--text); font-weight: 600;">
+                บันทึกเข้าแคตตาล็อกอัตโนมัติทันทีในแต่ละเรื่อง (Auto Save ต่อเนื่อง)
+              </label>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+              <button type="button" class="btn btn-outline" onclick="clearBatchUrls()" style="padding: 10px 16px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                ล้างข้อความ
+              </button>
+              <button type="button" id="batchStopBtn" class="btn btn-danger" onclick="stopBatchQueue()" style="display: none; padding: 10px 18px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                หยุดคิว
+              </button>
+              <button type="button" id="batchStartBtn" class="btn btn-primary" onclick="startBatchQueue()" style="padding: 10px 22px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                เริ่มดึงข้อมูลตามคิว
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Progress & Items Table Card -->
+      <div id="queueStatusCard" class="glass-card" style="display: none; margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin: 0 0 4px 0; display: flex; align-items: center; gap: 8px;">
+              <span>สถานะการประมวลผลคิว (Batch Queue)</span>
+              <span id="queueProgressBadge" style="font-size: 0.8rem; padding: 2px 8px; border-radius: 8px; background: rgba(59, 130, 246, 0.2); color: #93c5fd;">0 / 0</span>
+            </h3>
+            <div id="queueCurrentActivity" style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+              <span>กำลังเตรียมการ...</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span style="font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; background: rgba(34, 197, 94, 0.15); color: #4ade80;">
+              สำเร็จ: <strong id="queueSuccessCount">0</strong>
+            </span>
+            <span style="font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; background: rgba(239, 68, 68, 0.15); color: #f87171;">
+              ล้มเหลว: <strong id="queueErrorCount">0</strong>
+            </span>
+            <span style="font-size: 0.82rem; padding: 4px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">
+              คงเหลือ: <strong id="queueRemainingCount">0</strong>
+            </span>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
+          <div id="queueProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.3s ease;"></div>
+        </div>
+
+        <!-- Table -->
+        <div style="max-height: 340px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 8px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
+            <thead style="background: rgba(255, 255, 255, 0.04); position: sticky; top: 0; z-index: 1;">
+              <tr style="border-bottom: 1px solid var(--card-border);">
+                <th style="padding: 10px 12px; width: 45px;">#</th>
+                <th style="padding: 10px 12px;">เรื่อง / ลิงก์</th>
+                <th style="padding: 10px 12px; width: 110px;">จำนวนตอน</th>
+                <th style="padding: 10px 12px; width: 150px;">สถานะ</th>
+                <th style="padding: 10px 12px; width: 100px; text-align: center;">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="queueTableBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Result Edit Section (Hidden initially) -->
+      <div id="extractionResultCard" class="glass-card" style="display: none;">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 class="section-title">ตรวจสอบและบันทึกอนิเมะ</h2>
+            <p class="section-subtitle">คุณสามารถแก้ไขข้อมูลหรือลิงก์สตรีมก่อนบันทึกเข้าสู่ฐานข้อมูล SQLite ได้</p>
+          </div>
+          <button class="btn btn-accent" onclick="saveExtractedAnime()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            บันทึกเข้าแคตตาล็อก
+          </button>
+        </div>
+
+        <!-- Audio Collections Selector (If Sub & Dub detected) -->
+        <div id="splitCollectionsBanner" style="display: none; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;">
+          <div style="font-weight: 600; color: #93c5fd; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>🎉 ตรวจพบ 2 หมวดเสียง (ซับไทย และ พากย์ไทย):</span>
+              <span style="font-size: 0.82rem; font-weight: normal; color: var(--text-muted);">(ระบบจะบันทึกทั้ง 2 หมวดเข้าแคตตาล็อกให้อัตโนมัติเมื่อกดบันทึก)</span>
+            </div>
+          </div>
+          <div id="splitCollectionsButtons" style="display: flex; gap: 10px; flex-wrap: wrap;"></div>
+        </div>
+
+        <div class="preview-grid">
+          <div>
+            <img id="editCoverImg" class="poster-preview" src="" alt="Cover" />
+            <div class="form-group" style="margin-top: 12px;">
+              <label>Cover Image URL</label>
+              <input type="text" id="editCover" oninput="document.getElementById('editCoverImg').src = this.value" />
+            </div>
+            <div class="form-group">
+              <label>Slug / ID</label>
+              <input type="text" id="editSlug" />
+            </div>
+          </div>
+
+          <div>
+            <div class="form-group">
+              <label>ชื่อเรื่อง (Title)</label>
+              <input type="text" id="editTitle" style="font-size: 1.1rem; font-weight: 600;" />
+            </div>
+
+            <div class="input-row">
+              <div class="form-group" style="flex: 1;">
+                <label>คะแนน (Rating)</label>
+                <input type="text" id="editRating" value="8.5" />
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label>สถานะ (Status)</label>
+                <input type="text" id="editStatus" value="จบแล้ว" />
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label>ปีที่ฉาย (Year)</label>
+                <input type="text" id="editYear" value="2024" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>หมวดหมู่ (Genres คั่นด้วยคอมม่า)</label>
+              <input type="text" id="editGenres" placeholder="Action, Adventure, Fantasy" />
+            </div>
+
+            <div class="form-group">
+              <label>เรื่องย่อ (Synopsis)</label>
+              <textarea id="editSynopsis" rows="3"></textarea>
+            </div>
+
+            <div class="section-header" style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 style="font-size: 1.1rem; font-weight: 600;">รายการตอน (<span id="editEpCount">0</span> ตอน)</h3>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">ใส่ลิงก์สตรีมตรง (.m3u8 หรือ .mp4) สำหรับเล่นในแอป Flutter</p>
+              </div>
+              <button class="btn btn-outline" style="padding: 6px 14px; font-size: 0.85rem;" onclick="addEpisodeRow()">+ เพิ่มตอน</button>
+            </div>
+
+            <div class="episodes-table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 70px;">ตอนที่</th>
+                    <th>ชื่อตอน</th>
+                    <th>Direct Stream URL (.m3u8 / .mp4)</th>
+                    <th style="width: 80px;">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody id="episodesTableBody">
+                  <!-- Generated episode rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Anime Catalog Grid -->
+    <section id="tab-catalog" class="tab-panel">
+      <div class="glass-card">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 class="section-title">คลังหนังและอนิเมะในฐานข้อมูล</h2>
+            <p class="section-subtitle">ข้อมูลทั้งหมดนี้จะถูกส่งไปยังแอป Flutter ผ่านการซิงค์แบบ Isar</p>
+          </div>
+          <button class="btn btn-outline" onclick="loadCatalog()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            รีเฟรช
+          </button>
+        </div>
+
+        <div id="catalogGrid" class="anime-grid">
+          <!-- Anime cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Sync to Flutter -->
+    <section id="tab-sync" class="tab-panel">
+      <div class="glass-card sync-hero-card">
+        <h2 style="font-size: 1.8rem; font-weight: 700; color: var(--text);">ซิงค์ข้อมูลกับแอป Flutter (Isar Database)</h2>
+        <p style="color: var(--text-muted); max-width: 650px; margin: 10px auto 0;">
+          เปิดแอป AnimeView บนมือถือหรืออุปกรณ์ของคุณ แล้วกดปุ่ม <strong>"ซิงค์ข้อมูล"</strong> จากนั้นกรอกที่อยู่ IP ของเครื่องคอมพิวเตอร์นี้:
+        </p>
+
+        <div>
+          <div class="ip-display-box" id="recommendedSyncBox">
+            <span id="recommendedSyncUrl">กำลังโหลด...</span>
+            <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.85rem;" onclick="copySyncUrl()">คัดลอก</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="qr-container">
+            <div id="qrcodeBox"></div>
+            <p style="font-size: 0.9rem; color: var(--accent); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z"></path></svg>
+              ใช้แอปในมือถือกด "สแกน QR Code" เพื่อเชื่อมต่อทันที
+            </p>
+          </div>
+        </div>
+
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 10px;">
+          หมายเหตุ: มือถือและคอมพิวเตอร์ต้องเชื่อมต่อ Wi-Fi หรือเครือข่ายวงเดียวกัน
+        </p>
+
+        <div style="margin-top: 2rem;">
+          <a id="previewSyncJsonBtn" href="/api/sync" target="_blank" class="btn btn-outline">
+            เปิดดู Payload JSON ที่จะส่งให้ Isar
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Settings -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="glass-card" style="max-width: 720px; margin: 0 auto;">
+        <div class="section-header">
+          <h2 class="section-title">ตั้งค่า Local LLM (AI)</h2>
+          <p class="section-subtitle">เลือกและเชื่อมต่อไปยัง Ollama หรือ LM Studio เพื่อใช้ในการวิเคราะห์ข้อมูลเว็บ</p>
+        </div>
+
+        <div class="form-group">
+          <label>เลือกผู้ให้บริการ Local LLM</label>
+          <select id="llmProvider" onchange="toggleLlmFields()">
+            <option value="lmstudio">LM Studio (OpenAI-compatible)</option>
+            <option value="ollama">Ollama</option>
+          </select>
+        </div>
+
+        <!-- LM Studio Fields -->
+        <div id="lmstudioFields">
+          <div class="form-group">
+            <label>LM Studio Base URL</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="lmstudioUrl" value="http://localhost:1234/v1" />
+              <button class="btn btn-outline" type="button" onclick="autoDetectModels('lmstudio')" style="white-space: nowrap; padding: 0 16px;">
+                🔄 ดึงโมเดล
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Model Name (โมเดลที่จะใช้)</label>
+            <select id="lmstudioModelSelect" onchange="onModelSelectChange('lmstudio')" style="margin-bottom: 8px;">
+              <option value="auto">✨ อัตโนมัติ (ตรวจจับโมเดลที่กำลังรันอยู่ใน LM Studio)</option>
+              <option value="custom">✏️ กำหนดชื่อโมเดลเอง...</option>
+            </select>
+            <input type="text" id="lmstudioModel" value="auto" placeholder="ชื่อโมเดล หรือ auto" style="display: none;" />
+          </div>
+        </div>
+
+        <!-- Ollama Fields -->
+        <div id="ollamaFields" style="display: none;">
+          <div class="form-group">
+            <label>Ollama Base URL</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="ollamaUrl" value="http://localhost:11434" />
+              <button class="btn btn-outline" type="button" onclick="autoDetectModels('ollama')" style="white-space: nowrap; padding: 0 16px;">
+                🔄 ดึงโมเดล
+              </button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Model Name (โมเดลที่จะใช้)</label>
+            <select id="ollamaModelSelect" onchange="onModelSelectChange('ollama')" style="margin-bottom: 8px;">
+              <option value="auto">✨ อัตโนมัติ (ตรวจจับโมเดลที่เปิดใช้งานใน Ollama)</option>
+              <option value="custom">✏️ กำหนดชื่อโมเดลเอง...</option>
+            </select>
+            <input type="text" id="ollamaModel" value="auto" placeholder="ชื่อโมเดล เช่น llama3.2 หรือ auto" style="display: none;" />
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+          <button class="btn btn-outline" onclick="testLlmConnection()">
+            <span id="testLlmSpinner" class="spinner" style="display: none;"></span>
+            ทดสอบการเชื่อมต่อ
+          </button>
+          <button class="btn btn-primary" onclick="saveSettings()">บันทึกการตั้งค่า</button>
+        </div>
+
+        <div id="testLlmResult" style="margin-top: 15px; font-size: 0.9rem;"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Video Test Player Modal -->
+  <div id="videoModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="videoModalTitle" style="font-size: 1.1rem;">ทดสอบการเล่นวิดีโอ</h3>
+        <button class="btn btn-outline" style="padding: 4px 10px;" onclick="closeVideoModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 0; background: black; display: flex; justify-content: center;">
+        <video id="testVideoPlayer" controls autoplay style="width: 100%; max-height: 520px;"></video>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Message -->
+  <div id="toast" class="toast">
+    <span id="toastMsg">บันทึกสำเร็จ</span>
+  </div>
+
+  <script>
+    let currentAnimeData = null;
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      toast.className = `toast show ${type}`;
+      toastMsg.textContent = message;
+      setTimeout(() => {
+        toast.className = 'toast';
+      }, 3500);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+
+      if (tabId === 'catalog') loadCatalog();
+      if (tabId === 'sync') loadServerInfo();
+      if (tabId === 'settings') loadSettings();
+    }
+
+    // Toggle LLM Provider form fields
+    function toggleLlmFields() {
+      const provider = document.getElementById('llmProvider').value;
+      document.getElementById('lmstudioFields').style.display = provider === 'lmstudio' ? 'block' : 'none';
+      document.getElementById('ollamaFields').style.display = provider === 'ollama' ? 'block' : 'none';
+    }
+
+    let qrcodeInstance = null;
+
+    // Load Initial Server Info
+    async function loadServerInfo() {
+      try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        const syncUrl = data.recommended_sync_url || 'http://127.0.0.1:8800/api/sync';
+        document.getElementById('recommendedSyncUrl').textContent = syncUrl;
+
+        // Render QR Code for Mobile Scanning
+        const qrBox = document.getElementById('qrcodeBox');
+        if (qrBox && typeof QRCode !== 'undefined') {
+          qrBox.innerHTML = '';
+          qrcodeInstance = new QRCode(qrBox, {
+            text: syncUrl,
+            width: 190,
+            height: 190,
+            colorDark: "#05d9e8",
+            colorLight: "#0f1422",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function copySyncUrl() {
+      const text = document.getElementById('recommendedSyncUrl').textContent;
+      navigator.clipboard.writeText(text);
+      showToast('คัดลอก URL ซิงค์เรียบร้อยแล้ว!');
+    }
+
+    // Model Select handler
+    function onModelSelectChange(provider) {
+      const select = document.getElementById(`${provider}ModelSelect`);
+      const input = document.getElementById(`${provider}Model`);
+      if (select.value === 'custom') {
+        input.style.display = 'block';
+        input.value = '';
+        input.focus();
+      } else {
+        input.style.display = 'none';
+        input.value = select.value;
+      }
+    }
+
+    // Auto-detect models from server
+    async function autoDetectModels(provider) {
+      const urlInput = document.getElementById(`${provider}Url`);
+      const url = urlInput.value.trim();
+      const select = document.getElementById(`${provider}ModelSelect`);
+      const input = document.getElementById(`${provider}Model`);
+
+      showToast(`กำลังตรวจจับโมเดลจาก ${provider.toUpperCase()}...`);
+      try {
+        const res = await fetch(`/api/models?provider=${provider}&url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+
+        if (data.status === 'ok' && data.models && data.models.length > 0) {
+          const currentVal = input.value || 'auto';
+          const activeName = data.active_model ? ` (ตรวจพบ: ${data.active_model})` : '';
+
+          select.innerHTML = `
+            <option value="auto">✨ อัตโนมัติ${activeName}</option>
+            ${data.models.map(m => `<option value="${m}">${m} ${m === data.active_model ? '★ (กำลังโหลดอยู่)' : ''}</option>`).join('')}
+            <option value="custom">✏️ กำหนดชื่อโมเดลเอง...</option>
+          `;
+
+          if (currentVal && currentVal !== 'auto') {
+            const hasOption = data.models.includes(currentVal);
+            if (hasOption) {
+              select.value = currentVal;
+              input.style.display = 'none';
+            } else {
+              select.value = 'custom';
+              input.style.display = 'block';
+              input.value = currentVal;
+            }
+          } else {
+            select.value = 'auto';
+            input.value = 'auto';
+            input.style.display = 'none';
+          }
+
+          showToast(`ตรวจพบ ${data.models.length} โมเดลจาก ${provider.toUpperCase()}`);
+        } else {
+          showToast(`ไม่พบโมเดลที่กำลังรันใน ${provider.toUpperCase()} (ใช้ค่าอัตโนมัติ)`, 'warning');
+        }
+      } catch (e) {
+        console.error(e);
+        showToast(`ไม่สามารถตรวจจับโมเดลได้: ${e}`, 'error');
+      }
+    }
+
+    // Load LLM Settings
+    async function loadSettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        const provider = data.llm_provider || 'lmstudio';
+        document.getElementById('llmProvider').value = provider;
+        document.getElementById('lmstudioUrl').value = data.lmstudio_url || 'http://localhost:1234/v1';
+        document.getElementById('lmstudioModel').value = data.lmstudio_model || 'auto';
+        document.getElementById('ollamaUrl').value = data.ollama_url || 'http://localhost:11434';
+        document.getElementById('ollamaModel').value = data.ollama_model || 'auto';
+
+        toggleLlmFields();
+
+        // Auto detect models for current provider
+        autoDetectModels('lmstudio');
+        autoDetectModels('ollama');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function saveSettings() {
+      const payload = {
+        llm_provider: document.getElementById('llmProvider').value,
+        lmstudio_url: document.getElementById('lmstudioUrl').value,
+        lmstudio_model: document.getElementById('lmstudioModel').value,
+        ollama_url: document.getElementById('ollamaUrl').value,
+        ollama_model: document.getElementById('ollamaModel').value,
+      };
+
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          showToast('บันทึกการตั้งค่า LLM สำเร็จ!');
+        }
+      } catch (e) {
+        showToast('บันทึกการตั้งค่าไม่สำเร็จ: ' + e, 'error');
+      }
+    }
+
+    async function testLlmConnection() {
+      const spinner = document.getElementById('testLlmSpinner');
+      const resultBox = document.getElementById('testLlmResult');
+      spinner.style.display = 'inline-block';
+      resultBox.innerHTML = 'กำลังทดสอบการเชื่อมต่อกับ Local LLM...';
+
+      // First save current inputs so server tests using them
+      await saveSettings();
+
+      try {
+        const res = await fetch('/api/test_llm', { method: 'POST' });
+        const data = await res.json();
+        spinner.style.display = 'none';
+
+        if (data.status === 'connected') {
+          const provider = document.getElementById('llmProvider').value;
+          autoDetectModels(provider);
+          resultBox.innerHTML = `<span style="color: var(--success);">✓ เชื่อมต่อสำเร็จ! ตรวจพบโมเดล: ${data.models.join(', ') || 'พร้อมใช้งาน'}</span>`;
+          showToast('เชื่อมต่อ Local LLM สำเร็จ!');
+        } else {
+          resultBox.innerHTML = `<span style="color: var(--danger);">✗ เชื่อมต่อไม่สำเร็จ: ${data.message} (โปรดตรวจสอบว่าเปิด Ollama หรือ LM Studio ไว้หรือยัง)</span>`;
+          showToast('ไม่สามารถเชื่อมต่อ Local LLM ได้', 'error');
+        }
+      } catch (e) {
+        spinner.style.display = 'none';
+        resultBox.innerHTML = `<span style="color: var(--danger);">✗ เกิดข้อผิดพลาด: ${e}</span>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Extractor Modes: Single URL vs. Batch Queue
+    let currentExtractorMode = 'single';
+    let isQueueRunning = false;
+    let batchQueueItems = [];
+
+    function switchExtractorMode(mode) {
+      currentExtractorMode = mode;
+      const singleBtn = document.getElementById('modeSingleBtn');
+      const batchBtn = document.getElementById('modeBatchBtn');
+      const singleSec = document.getElementById('singleModeSection');
+      const batchSec = document.getElementById('batchModeSection');
+
+      if (mode === 'single') {
+        singleBtn.style.background = 'rgba(255, 23, 68, 0.15)';
+        singleBtn.style.borderColor = 'var(--primary)';
+        singleBtn.style.color = 'white';
+
+        batchBtn.style.background = 'transparent';
+        batchBtn.style.borderColor = 'var(--card-border)';
+        batchBtn.style.color = 'var(--text)';
+
+        singleSec.style.display = 'block';
+        batchSec.style.display = 'none';
+      } else {
+        batchBtn.style.background = 'rgba(0, 229, 255, 0.15)';
+        batchBtn.style.borderColor = 'var(--accent)';
+        batchBtn.style.color = 'white';
+
+        singleBtn.style.background = 'transparent';
+        singleBtn.style.borderColor = 'var(--card-border)';
+        singleBtn.style.color = 'var(--text)';
+
+        singleSec.style.display = 'none';
+        batchSec.style.display = 'block';
+        updateBatchUrlCount();
+      }
+    }
+
+    function updateBatchUrlCount() {
+      const text = document.getElementById('batchUrls').value;
+      const urls = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l.startsWith('http'));
+      document.getElementById('batchUrlCountBadge').textContent = `${urls.length} เรื่อง`;
+    }
+
+    function clearBatchUrls() {
+      document.getElementById('batchUrls').value = '';
+      updateBatchUrlCount();
+    }
+
+    function stopBatchQueue() {
+      if (!isQueueRunning) return;
+      isQueueRunning = false;
+      document.getElementById('queueCurrentActivity').innerHTML = '<span style="color: var(--danger);">🛑 ผู้ใช้สั่งหยุดการทำงานของคิว</span>';
+      showToast('หยุดการทำงานของคิวแล้ว', 'info');
+    }
+
+    function renderQueueTable() {
+      const tbody = document.getElementById('queueTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      let successCount = 0;
+      let errorCount = 0;
+      let remainingCount = 0;
+
+      batchQueueItems.forEach((item, index) => {
+        if (item.status === 'success') successCount++;
+        else if (item.status === 'failed') errorCount++;
+        else if (item.status === 'pending' || item.status === 'processing' || item.status === 'saving') remainingCount++;
+
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(255, 255, 255, 0.05)';
+
+        let statusHtml = '';
+        if (item.status === 'pending') {
+          statusHtml = '<span style="color: var(--text-muted); font-size: 0.82rem;">⏳ รอคิว</span>';
+        } else if (item.status === 'processing') {
+          statusHtml = '<span style="color: var(--accent); font-weight: 600; font-size: 0.82rem; display: flex; align-items: center; gap: 4px;"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span> AI กำลังวิเคราะห์</span>';
+        } else if (item.status === 'saving') {
+          statusHtml = '<span style="color: #60a5fa; font-weight: 600; font-size: 0.82rem; display: flex; align-items: center; gap: 4px;"><span class="spinner" style="width: 12px; height: 12px; border-width: 2px;"></span> กำลัง Auto-Save</span>';
+        } else if (item.status === 'success') {
+          statusHtml = '<span style="color: #4ade80; font-weight: 600; font-size: 0.82rem;">✓ บันทึกสำเร็จ</span>';
+        } else if (item.status === 'extracted') {
+          statusHtml = '<span style="color: #93c5fd; font-weight: 600; font-size: 0.82rem;">✓ วิเคราะห์เสร็จ</span>';
+        } else if (item.status === 'failed') {
+          statusHtml = `<span style="color: #f87171; font-weight: 600; font-size: 0.82rem;" title="${escapeHtml(item.error || '')}">✗ ผิดพลาด</span>`;
+        } else if (item.status === 'stopped') {
+          statusHtml = '<span style="color: var(--text-muted); font-size: 0.82rem;">⏹ ยกเลิก</span>';
+        }
+
+        const titleDisplay = item.title 
+          ? `<strong>${escapeHtml(item.title)}</strong><br/><span style="font-size: 0.78rem; color: var(--text-muted); word-break: break-all;">${escapeHtml(item.url)}</span>` 
+          : `<span style="word-break: break-all; color: var(--text-muted); font-size: 0.82rem;">${escapeHtml(item.url)}</span>`;
+
+        const epDisplay = item.episodesCount ? `${item.episodesCount} ตอน` : (item.status === 'pending' || item.status === 'processing' ? '-' : '0 ตอน');
+
+        const canInspect = !!item.resultData;
+        const actionBtn = canInspect 
+          ? `<button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.78rem;" onclick="inspectQueueItem(${index})">ดู/แก้ไข</button>`
+          : '-';
+
+        tr.innerHTML = `
+          <td style="padding: 10px 12px; font-weight: 600; color: var(--text-muted);">${index + 1}</td>
+          <td style="padding: 10px 12px;">${titleDisplay}</td>
+          <td style="padding: 10px 12px;">${epDisplay}</td>
+          <td style="padding: 10px 12px;">${statusHtml}</td>
+          <td style="padding: 10px 12px; text-align: center;">${actionBtn}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('queueSuccessCount').textContent = successCount;
+      document.getElementById('queueErrorCount').textContent = errorCount;
+      document.getElementById('queueRemainingCount').textContent = remainingCount;
+    }
+
+    function inspectQueueItem(index) {
+      const item = batchQueueItems[index];
+      if (!item || !item.resultData) return;
+      currentAnimeData = item.resultData;
+      renderExtractionResult(item.resultData);
+      document.getElementById('extractionResultCard').scrollIntoView({ behavior: 'smooth' });
+      showToast(`เปิดดูข้อมูล: ${item.title || item.url}`, 'info');
+    }
+
+    async function startBatchQueue() {
+      if (isQueueRunning) return;
+
+      const text = document.getElementById('batchUrls').value;
+      const urls = text.split('\n').map(l => l.trim()).filter(l => l.length > 0 && l.startsWith('http'));
+
+      if (urls.length === 0) {
+        showToast('กรุณากรอกลิงก์เว็บ (http/https) อย่างน้อย 1 เรื่อง', 'error');
+        return;
+      }
+
+      const autoSave = document.getElementById('batchAutoSave').checked;
+
+      batchQueueItems = urls.map((url, idx) => ({
+        id: idx + 1,
+        url: url,
+        title: '',
+        episodesCount: 0,
+        status: 'pending',
+        error: null,
+        resultData: null,
+        saved: false
+      }));
+
+      const queueCard = document.getElementById('queueStatusCard');
+      queueCard.style.display = 'block';
+
+      const startBtn = document.getElementById('batchStartBtn');
+      const stopBtn = document.getElementById('batchStopBtn');
+      const urlsTextarea = document.getElementById('batchUrls');
+
+      startBtn.disabled = true;
+      startBtn.innerHTML = '<span class="spinner"></span> กำลังดึงตามคิว...';
+      stopBtn.style.display = 'inline-flex';
+      urlsTextarea.disabled = true;
+
+      isQueueRunning = true;
+      renderQueueTable();
+
+      const total = batchQueueItems.length;
+
+      for (let i = 0; i < total; i++) {
+        if (!isQueueRunning) {
+          for (let j = i; j < total; j++) {
+            if (batchQueueItems[j].status === 'pending') {
+              batchQueueItems[j].status = 'stopped';
+            }
+          }
+          renderQueueTable();
+          break;
+        }
+
+        const item = batchQueueItems[i];
+        item.status = 'processing';
+        renderQueueTable();
+
+        document.getElementById('queueProgressBadge').textContent = `${i + 1} / ${total}`;
+        document.getElementById('queueProgressBar').style.width = `${Math.round(((i) / total) * 100)}%`;
+        document.getElementById('queueCurrentActivity').innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span> กำลังวิเคราะห์ (${i + 1}/${total}): <span style="color: var(--accent); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;">${escapeHtml(item.url)}</span>`;
+
+        try {
+          // 1. Call /api/extract
+          const res = await fetch('/api/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: item.url, use_ai: true })
+          });
+
+          if (!res.ok) {
+            throw new Error(await res.text());
+          }
+
+          const data = await res.json();
+          item.resultData = data;
+          item.title = data.title || 'ไม่ระบุชื่อ';
+          item.episodesCount = (data.episodes && data.episodes.length) || 0;
+
+          // 2. If Auto Save is checked, save immediately to SQLite
+          if (autoSave) {
+            item.status = 'saving';
+            renderQueueTable();
+
+            const saveRes = await fetch('/api/anime', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            });
+
+            if (!saveRes.ok) {
+              throw new Error('วิเคราะห์ผ่านแต่บันทึกไม่สำเร็จ: ' + (await saveRes.text()));
+            }
+
+            item.saved = true;
+            item.status = 'success';
+            loadCatalog(); // Refresh catalog in real time!
+          } else {
+            item.status = 'extracted';
+          }
+        } catch (err) {
+          item.status = 'failed';
+          item.error = err.message || String(err);
+        }
+
+        renderQueueTable();
+        document.getElementById('queueProgressBar').style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+      }
+
+      isQueueRunning = false;
+      startBtn.disabled = false;
+      startBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> เริ่มดึงข้อมูลตามคิว`;
+      stopBtn.style.display = 'none';
+      urlsTextarea.disabled = false;
+
+      const successTotal = batchQueueItems.filter(it => it.status === 'success' || it.status === 'extracted').length;
+      const failTotal = batchQueueItems.filter(it => it.status === 'failed').length;
+
+      document.getElementById('queueCurrentActivity').innerHTML = `<span>✓ ประมวลผลเสร็จสิ้น (สำเร็จ ${successTotal} เรื่อง, ล้มเหลว ${failTotal} เรื่อง)</span>`;
+      showToast(`การดึงข้อมูลคิวเสร็จสมบูรณ์! สำเร็จ ${successTotal} เรื่อง`);
+    }
+
+    function clearThinkingLogs() {
+      const box = document.getElementById('aiThinkingBox');
+      if (box) box.textContent = '';
+    }
+
+    function appendThinkingLog(text, isChunk = false) {
+      const card = document.getElementById('aiThinkingCard');
+      const box = document.getElementById('aiThinkingBox');
+      if (!card || !box) return;
+      card.style.display = 'block';
+
+      if (isChunk) {
+        box.appendChild(document.createTextNode(text));
+      } else {
+        const time = new Date().toLocaleTimeString('th-TH');
+        const prefix = box.textContent.length === 0 || box.textContent.endsWith('\n') ? '' : '\n';
+        box.appendChild(document.createTextNode(`${prefix}[${time}] ${text}\n`));
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // AI Extraction (Single URL)
+    async function startExtraction() {
+      const url = document.getElementById('targetUrl').value.trim();
+      if (!url) {
+        showToast('กรุณากรอก URL ที่ต้องการดึงข้อมูล', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('extractBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> กำลังดึงและวิเคราะห์ด้วย AI...';
+
+      const thinkingCard = document.getElementById('aiThinkingCard');
+      const thinkingBox = document.getElementById('aiThinkingBox');
+      if (thinkingCard) thinkingCard.style.display = 'block';
+      if (thinkingBox) thinkingBox.textContent = '';
+
+      appendThinkingLog(`🚀 เริ่มต้นดึงข้อมูลจาก: ${url}`);
+
+      let finalResult = null;
+
+      try {
+        const response = await fetch('/api/extract_stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url, use_ai: true })
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // keep remainder
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.slice(5).trim();
+            if (!jsonStr) continue;
+
+            try {
+              const event = JSON.parse(jsonStr);
+              if (event.type === 'log') {
+                appendThinkingLog(event.message);
+              } else if (event.type === 'thinking') {
+                appendThinkingLog(event.chunk, true);
+              } else if (event.type === 'done') {
+                finalResult = event.result;
+              } else if (event.type === 'error') {
+                appendThinkingLog(`❌ ข้อผิดพลาด: ${event.message}`);
+                throw new Error(event.message);
+              }
+            } catch (err) {
+              if (err.message && !err.message.includes('JSON.parse')) {
+                throw err;
+              }
+            }
+          }
+        }
+
+        if (finalResult) {
+          currentAnimeData = finalResult;
+          renderExtractionResult(finalResult);
+
+          const autoSave = document.getElementById('singleAutoSave') && document.getElementById('singleAutoSave').checked;
+          if (autoSave) {
+            await saveExtractedAnime();
+            showToast('วิเคราะห์และบันทึกเข้าแคตตาล็อกอัตโนมัติเรียบร้อย!');
+          } else {
+            showToast('วิเคราะห์ข้อมูลเสร็จสิ้น!');
+          }
+        } else {
+          throw new Error('ไม่พบข้อมูลผลลัพธ์จากเซิร์ฟเวอร์');
+        }
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการดึงข้อมูล: ' + e.message, 'error');
+        appendThinkingLog(`⚠️ ดึงข้อมูลไม่สำเร็จ: ${e.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> วิเคราะห์ด้วย AI`;
+      }
+    }
+
+    let activeCollectionSlug = null;
+
+    function saveFormToCurrentCollection() {
+      if (!currentAnimeData || !currentAnimeData.split_collections) return;
+      const slug = document.getElementById('editSlug').value.trim();
+      const col = currentAnimeData.split_collections.find(c => c.slug === slug || c.slug === activeCollectionSlug);
+      if (!col) return;
+
+      const rows = document.querySelectorAll('#episodesTableBody tr');
+      const episodes = [];
+      const seenIds = new Set();
+      rows.forEach((tr, idx) => {
+        const num = parseFloat(tr.querySelector('.ep-num').value) || (idx + 1);
+        const title = tr.querySelector('.ep-title').value;
+        const streamUrl = tr.querySelector('.ep-stream').value;
+        let epId = `${slug}-ep-${num}`;
+        let counter = 1;
+        while (seenIds.has(epId)) {
+          counter++;
+          epId = `${slug}-ep-${num}-${counter}`;
+        }
+        seenIds.add(epId);
+
+        episodes.push({
+          id: epId,
+          episode_number: num,
+          title: title,
+          stream_url: streamUrl,
+          thumbnail_url: document.getElementById('editCover').value.trim()
+        });
+      });
+
+      col.title = document.getElementById('editTitle').value.trim();
+      col.slug = slug;
+      col.cover_url = document.getElementById('editCover').value.trim();
+      col.backdrop_url = document.getElementById('editCover').value.trim();
+      col.rating = document.getElementById('editRating').value.trim();
+      col.status = document.getElementById('editStatus').value.trim();
+      col.year = document.getElementById('editYear').value.trim();
+      col.genres = document.getElementById('editGenres').value.split(',').map(s => s.trim()).filter(Boolean);
+      col.synopsis = document.getElementById('editSynopsis').value.trim();
+      col.episodes = episodes;
+    }
+
+    function renderExtractionResult(data) {
+      activeCollectionSlug = data.slug || null;
+      document.getElementById('extractionResultCard').style.display = 'block';
+
+      // Audio Collections Selector (If Sub & Dub detected)
+      const banner = document.getElementById('splitCollectionsBanner');
+      const btnContainer = document.getElementById('splitCollectionsButtons');
+      if (currentAnimeData && currentAnimeData.split_collections && currentAnimeData.split_collections.length > 1) {
+        banner.style.display = 'block';
+        btnContainer.innerHTML = '';
+        currentAnimeData.split_collections.forEach((col, idx) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          const isCurrent = (col.slug === data.slug);
+          btn.className = isCurrent ? 'btn btn-primary' : 'btn btn-outline';
+          btn.style.padding = '6px 14px';
+          btn.style.fontSize = '0.85rem';
+          btn.textContent = col.title || `หมวด ${idx + 1}`;
+          btn.onclick = () => {
+            saveFormToCurrentCollection();
+            renderExtractionResult(col);
+          };
+          btnContainer.appendChild(btn);
+        });
+      } else {
+        banner.style.display = 'none';
+      }
+
+      document.getElementById('editTitle').value = data.title || '';
+      document.getElementById('editSlug').value = data.slug || '';
+      document.getElementById('editCover').value = data.cover_url || '';
+      document.getElementById('editCoverImg').src = data.cover_url || '';
+      document.getElementById('editRating').value = data.rating || '8.5';
+      document.getElementById('editStatus').value = data.status || 'จบแล้ว (เดอะมูฟวี่)';
+      document.getElementById('editYear').value = data.year || '2024';
+      document.getElementById('editGenres').value = Array.isArray(data.genres) ? data.genres.join(', ') : '';
+      document.getElementById('editSynopsis').value = data.synopsis || '';
+
+      const tbody = document.getElementById('episodesTableBody');
+      tbody.innerHTML = '';
+
+      const episodes = data.episodes || [];
+      document.getElementById('editEpCount').textContent = episodes.length;
+
+      episodes.forEach((ep, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="number" step="0.5" class="ep-num" value="${ep.episode_number || (idx + 1)}" style="padding: 6px; width: 60px;" /></td>
+          <td><input type="text" class="ep-title" value="${ep.title || `ตอนที่ ${idx + 1}`}" style="padding: 6px;" /></td>
+          <td>
+            <div style="display: flex; gap: 6px;">
+              <input type="text" class="ep-stream" value="${ep.stream_url || ''}" placeholder="URL วิดีโอ .m3u8 หรือ .mp4" style="padding: 6px;" />
+              ${ep.stream_url ? `<button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;" onclick="playTestStream('${ep.stream_url}', '${ep.title}')">ทดสอบ</button>` : ''}
+            </div>
+          </td>
+          <td>
+            <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.75rem;" onclick="this.closest('tr').remove(); updateEpCount();">ลบ</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Smooth scroll to results
+      document.getElementById('extractionResultCard').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function updateEpCount() {
+      const count = document.querySelectorAll('#episodesTableBody tr').length;
+      document.getElementById('editEpCount').textContent = count;
+    }
+
+    function addEpisodeRow() {
+      const count = document.querySelectorAll('#episodesTableBody tr').length + 1;
+      const tbody = document.getElementById('episodesTableBody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="number" step="0.5" class="ep-num" value="${count}" style="padding: 6px; width: 60px;" /></td>
+        <td><input type="text" class="ep-title" value="ตอนที่ ${count}" style="padding: 6px;" /></td>
+        <td><input type="text" class="ep-stream" value="" placeholder="URL วิดีโอ .m3u8 หรือ .mp4" style="padding: 6px;" /></td>
+        <td><button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.75rem;" onclick="this.closest('tr').remove(); updateEpCount();">ลบ</button></td>
+      `;
+      tbody.appendChild(tr);
+      updateEpCount();
+    }
+
+    async function saveExtractedAnime() {
+      if (currentAnimeData && currentAnimeData.split_collections) {
+        saveFormToCurrentCollection();
+      }
+
+      const rows = document.querySelectorAll('#episodesTableBody tr');
+      const episodes = [];
+      const slug = document.getElementById('editSlug').value.trim();
+      const seenIds = new Set();
+
+      rows.forEach((tr, idx) => {
+        const num = parseFloat(tr.querySelector('.ep-num').value) || (idx + 1);
+        const title = tr.querySelector('.ep-title').value;
+        const streamUrl = tr.querySelector('.ep-stream').value;
+        let epId = `${slug}-ep-${num}`;
+        let counter = 1;
+        while (seenIds.has(epId)) {
+          counter++;
+          epId = `${slug}-ep-${num}-${counter}`;
+        }
+        seenIds.add(epId);
+
+        episodes.push({
+          id: epId,
+          episode_number: num,
+          title: title,
+          stream_url: streamUrl,
+          thumbnail_url: document.getElementById('editCover').value.trim()
+        });
+      });
+
+      const payload = {
+        slug: slug,
+        title: document.getElementById('editTitle').value.trim(),
+        cover_url: document.getElementById('editCover').value.trim(),
+        backdrop_url: document.getElementById('editCover').value.trim(),
+        rating: document.getElementById('editRating').value.trim(),
+        status: document.getElementById('editStatus').value.trim(),
+        year: document.getElementById('editYear').value.trim(),
+        genres: document.getElementById('editGenres').value.split(',').map(s => s.trim()).filter(Boolean),
+        synopsis: document.getElementById('editSynopsis').value.trim(),
+        source_url: document.getElementById('targetUrl').value.trim(),
+        episodes: episodes,
+        split_collections: (currentAnimeData && currentAnimeData.split_collections) ? currentAnimeData.split_collections : undefined
+      };
+
+      try {
+        const res = await fetch('/api/anime', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+
+        showToast('บันทึกอนิเมะเข้าฐานข้อมูลเรียบร้อยแล้ว!');
+        loadCatalog();
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการบันทึก: ' + e.message, 'error');
+      }
+    }
+
+    // Catalog Loading
+    async function loadCatalog() {
+      try {
+        const res = await fetch('/api/anime');
+        const animes = await res.json();
+        document.getElementById('catalogCount').textContent = animes.length;
+
+        const grid = document.getElementById('catalogGrid');
+        grid.innerHTML = '';
+
+        if (animes.length === 0) {
+          grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">ยังไม่มีข้อมูลอนิเมะในคลัง กดที่แท็บ "ดึงข้อมูลด้วย AI" เพื่อเพิ่มเรื่องแรก</div>';
+          return;
+        }
+
+        animes.forEach(a => {
+          const card = document.createElement('div');
+          card.className = 'anime-card';
+          const epCount = a.episodes ? a.episodes.length : (a.episode_count || 0);
+
+          card.innerHTML = `
+            <div class="anime-poster-box">
+              <img class="anime-poster-img" src="${a.cover_url || 'https://via.placeholder.com/300x450'}" alt="${a.title}" onerror="this.src='https://via.placeholder.com/300x450'" />
+              <div class="anime-ep-badge">${epCount} ตอน</div>
+            </div>
+            <div class="anime-info">
+              <h4 class="anime-card-title">${a.title}</h4>
+              <div class="anime-genres">
+                ${(a.genres || []).slice(0, 3).map(g => `<span class="genre-tag">${g}</span>`).join('')}
+              </div>
+              <div class="anime-actions">
+                <button class="btn btn-outline" style="flex: 1; padding: 6px;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
+                <button class="btn btn-danger" style="padding: 6px 12px;" onclick="deleteAnime('${a.slug}')">ลบ</button>
+              </div>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function editAnimeInStudio(anime) {
+      currentAnimeData = anime;
+      document.querySelector('.tab-btn').click(); // Switch to extractor tab
+      renderExtractionResult(anime);
+    }
+
+    async function deleteAnime(slug) {
+      if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบเรื่องนี้ (${slug})?`)) return;
+
+      try {
+        const res = await fetch(`/api/anime/${slug}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('ลบเรียบร้อยแล้ว!');
+          loadCatalog();
+        }
+      } catch (e) {
+        showToast('ลบไม่สำเร็จ: ' + e, 'error');
+      }
+    }
+
+    // Video modal preview with HLS.js and Proxy support
+    let currentHlsInstance = null;
+
+    function playTestStream(streamUrl, title) {
+      const modal = document.getElementById('videoModal');
+      const video = document.getElementById('testVideoPlayer');
+      const modalTitle = document.getElementById('videoModalTitle');
+      modalTitle.textContent = title || 'ทดสอบสตรีมวิดีโอ';
+
+      if (currentHlsInstance) {
+        currentHlsInstance.destroy();
+        currentHlsInstance = null;
+      }
+      video.pause();
+      video.src = '';
+
+      // Route through local stripping proxy if animenani, 24playerhd/orbitalkthai, stream-aph, maimeorder or protected CDN
+      let playableUrl = streamUrl;
+      const lower = streamUrl.toLowerCase();
+      if (lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('orbitalkthai') || lower.includes('stream-aph') || lower.includes('qqhls') || lower.includes('flower.txt') || lower.includes('/o/') || lower.includes('maimeorder') || lower.includes('animemami') || lower.endsWith('.txt')) {
+        playableUrl = `/api/proxy/hls/manifest?url=${encodeURIComponent(streamUrl)}`;
+      }
+
+      const isHls = playableUrl.includes('.m3u8') || playableUrl.includes('/proxy/hls/manifest') || playableUrl.includes('flower.txt') || lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('stream-aph') || lower.includes('maimeorder') || lower.includes('animemami') || lower.endsWith('.txt');
+
+      if (isHls && window.Hls && Hls.isSupported()) {
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+        });
+        hls.loadSource(playableUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('[HLS Error]', data);
+          if (data.fatal) {
+            showToast('HLS Stream Error: ' + (data.details || data.type), 'error');
+          }
+        });
+        currentHlsInstance = hls;
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = playableUrl;
+        video.play().catch(() => {});
+      } else {
+        video.src = playableUrl;
+        video.play().catch(() => {});
+      }
+
+      modal.classList.add('open');
+    }
+
+    function closeVideoModal() {
+      const modal = document.getElementById('videoModal');
+      const video = document.getElementById('testVideoPlayer');
+      if (currentHlsInstance) {
+        currentHlsInstance.destroy();
+        currentHlsInstance = null;
+      }
+      video.pause();
+      video.src = '';
+      modal.classList.remove('open');
+    }
+
+    // Init on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadServerInfo();
+      loadCatalog();
+    });
+  </script>
+</body>
+</html>

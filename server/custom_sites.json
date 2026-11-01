@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Custom Anime Template (ตัวอย่างสำหรับเพิ่มเว็บใหม่)",
+    "domains": ["custom-example.com"],
+    "title_selector": "h1.entry-title, h1.post-title",
+    "title_clean_regex": "\\s*ตอนที่\\s*\\d+.*$",
+    "cover_selector": ".post-content-img img, .poster img, .entry-thumbnail img",
+    "synopsis_selector": ".content-des p, .entry-content p, .synopsis",
+    "episodes_selector": ".eplink a, .episode-list a",
+    "episode_number_regex": "(?:ตอนที่|ep(?:isode)?)[-_.\\s]*(\\d+(?:\\.\\d+)?)",
+    "stream_regex": "https?://[^\\s\"'<>]+(?:\\.m3u8|\\.mp4)[^\\s\"'<>]*"
+  }
+]
