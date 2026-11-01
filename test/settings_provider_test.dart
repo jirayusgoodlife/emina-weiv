@@ -179,4 +179,45 @@ void main() {
       expect(reloaded.isListView, isFalse);
     });
   });
+
+  group('SettingsProvider (ค่าความสว่างและระดับเสียงใน Player)', () {
+    test('ค่ามาตรฐานคือ null (ยังไม่มีการปรับแต่ง)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final settings = SettingsProvider(prefs: prefs);
+
+      expect(settings.playerBrightness, isNull);
+      expect(settings.playerVolume, isNull);
+    });
+
+    test('บันทึกค่าความสว่างและระดับเสียง และโหลดกลับมาได้ถูกต้องพร้อมจำกัดช่วง 0.0 - 1.0', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final settings = SettingsProvider(prefs: prefs);
+
+      int notified = 0;
+      settings.addListener(() => notified++);
+
+      await settings.setPlayerBrightness(0.25);
+      expect(settings.playerBrightness, 0.25);
+      expect(prefs.getDouble('pref_player_brightness'), 0.25);
+      expect(notified, 1);
+
+      await settings.setPlayerVolume(0.85);
+      expect(settings.playerVolume, 0.85);
+      expect(prefs.getDouble('pref_player_volume'), 0.85);
+      expect(notified, 2);
+
+      // Clamp test
+      await settings.setPlayerBrightness(-0.5);
+      expect(settings.playerBrightness, 0.0);
+      await settings.setPlayerVolume(1.5);
+      expect(settings.playerVolume, 1.0);
+
+      // Reload from SharedPreferences
+      final reloaded = SettingsProvider(prefs: prefs);
+      expect(reloaded.playerBrightness, 0.0);
+      expect(reloaded.playerVolume, 1.0);
+    });
+  });
 }

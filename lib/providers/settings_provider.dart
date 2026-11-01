@@ -10,6 +10,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _prefNextLeadSecondsKey = 'pref_next_episode_lead_seconds';
   static const String _prefAutoRotateKey = 'pref_auto_rotate';
   static const String _prefCatalogViewModeKey = 'pref_catalog_view_mode';
+  static const String _prefPlayerBrightnessKey = 'pref_player_brightness';
+  static const String _prefPlayerVolumeKey = 'pref_player_volume';
 
   /// ค่าเริ่มต้น: แสดงปุ่ม "ตอนต่อไป" ตั้งแต่ 180 วินาทีสุดท้ายของตอน
   static const int defaultNextLeadSeconds = 180;
@@ -24,6 +26,8 @@ class SettingsProvider extends ChangeNotifier {
   int _nextLeadSeconds = defaultNextLeadSeconds;
   bool _autoRotate = defaultAutoRotate;
   bool _isListView = defaultIsListView;
+  double? _playerBrightness;
+  double? _playerVolume;
 
   SettingsProvider({required SharedPreferences prefs}) : _prefs = prefs {
     _showNextEpisodeButton =
@@ -31,12 +35,22 @@ class SettingsProvider extends ChangeNotifier {
     _nextLeadSeconds = _sanitizeLead(_prefs.getInt(_prefNextLeadSecondsKey));
     _autoRotate = _prefs.getBool(_prefAutoRotateKey) ?? defaultAutoRotate;
     _isListView = _prefs.getBool(_prefCatalogViewModeKey) ?? defaultIsListView;
+    final savedBrightness = _prefs.getDouble(_prefPlayerBrightnessKey);
+    if (savedBrightness != null) {
+      _playerBrightness = savedBrightness.clamp(0.0, 1.0);
+    }
+    final savedVolume = _prefs.getDouble(_prefPlayerVolumeKey);
+    if (savedVolume != null) {
+      _playerVolume = savedVolume.clamp(0.0, 1.0);
+    }
   }
 
   bool get showNextEpisodeButton => _showNextEpisodeButton;
   int get nextLeadSeconds => _nextLeadSeconds;
   bool get autoRotate => _autoRotate;
   bool get isListView => _isListView;
+  double? get playerBrightness => _playerBrightness;
+  double? get playerVolume => _playerVolume;
 
   Future<void> setListView(bool value) async {
     if (_isListView == value) return;
@@ -100,6 +114,24 @@ class SettingsProvider extends ChangeNotifier {
     } else {
       await _prefs.setBool(_prefAutoRotateKey, value);
     }
+    notifyListeners();
+  }
+
+  /// บันทึกค่าความสว่างที่ผู้ใช้ปรับไว้ใน Player (0.0 - 1.0) เพื่อจำไว้ใช้กับทุกเรื่อง
+  Future<void> setPlayerBrightness(double value) async {
+    final clamped = value.clamp(0.0, 1.0);
+    if (_playerBrightness == clamped) return;
+    _playerBrightness = clamped;
+    await _prefs.setDouble(_prefPlayerBrightnessKey, clamped);
+    notifyListeners();
+  }
+
+  /// บันทึกค่าระดับเสียงที่ผู้ใช้ปรับไว้ใน Player (0.0 - 1.0) เพื่อจำไว้ใช้กับทุกเรื่อง
+  Future<void> setPlayerVolume(double value) async {
+    final clamped = value.clamp(0.0, 1.0);
+    if (_playerVolume == clamped) return;
+    _playerVolume = clamped;
+    await _prefs.setDouble(_prefPlayerVolumeKey, clamped);
     notifyListeners();
   }
 

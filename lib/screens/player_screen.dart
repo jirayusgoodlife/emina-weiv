@@ -73,6 +73,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isDraggingBottomSlider = false;
   double _bottomSliderValue = 0.0;
 
+  // Double tap seek variables (Left = -10s, Right = +10s)
+  TapDownDetails? _doubleTapDetails;
+  bool _showDoubleTapFeedback = false;
+  bool _doubleTapIsForward = true;
+  int _doubleTapSeekSeconds = 0;
+  Timer? _doubleTapFeedbackTimer;
+
   @override
   void initState() {
     super.initState();
@@ -86,28 +93,40 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     PipService.onPipAction = _onPipAction;
     _updateAutoPip(true);
 
-    // Initial brightness and volume levels
-    PipService.getBrightness().then((b) {
-      if (mounted) {
-        setState(() {
-          _currentBrightness = b;
-        });
-      }
-    });
-    PipService.getVolume().then((v) {
-      if (mounted) {
-        setState(() {
-          _currentVolume = v;
-        });
-      }
-    });
-
     // Follow the real device orientation (unless auto-rotate is turned off in settings)
     final settings = Provider.of<SettingsProvider>(context, listen: false);
     _settings = settings;
     _autoRotate = settings.autoRotate;
     settings.addListener(_onSettingsChanged);
     _applyOrientationPolicy();
+
+    // Restore saved brightness and volume (persists across all anime, episodes, and app restarts)
+    if (settings.playerBrightness != null) {
+      _currentBrightness = settings.playerBrightness!;
+      final hwBrightness = _currentBrightness.clamp(0.001, 1.0);
+      PipService.setBrightness(hwBrightness);
+    } else {
+      PipService.getBrightness().then((b) {
+        if (mounted && _settings?.playerBrightness == null) {
+          setState(() {
+            _currentBrightness = b;
+          });
+        }
+      });
+    }
+
+    if (settings.playerVolume != null) {
+      _currentVolume = settings.playerVolume!;
+      PipService.setVolume(_currentVolume);
+    } else {
+      PipService.getVolume().then((v) {
+        if (mounted && _settings?.playerVolume == null) {
+          setState(() {
+            _currentVolume = v;
+          });
+        }
+      });
+    }
 
     _initCurrentEpisode();
 
@@ -297,6 +316,40 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     setState(() {});
   }
 
+  void _onDoubleTapDown(TapDownDetails details) {
+    _doubleTapDetails = details;
+  }
+
+  void _onDoubleTap() {
+    if (_isPipMode || _isLoading || _errorMessage != null) return;
+    final details = _doubleTapDetails;
+    if (details == null) return;
+    final width = MediaQuery.of(context).size.width;
+    final isForward = details.globalPosition.dx >= width / 2;
+
+    _doubleTapFeedbackTimer?.cancel();
+    if (_showDoubleTapFeedback && _doubleTapIsForward == isForward) {
+      _doubleTapSeekSeconds += isForward ? 10 : -10;
+    } else {
+      _doubleTapIsForward = isForward;
+      _doubleTapSeekSeconds = isForward ? 10 : -10;
+    }
+
+    _showDoubleTapFeedback = true;
+    _seekRelative(isForward ? 10 : -10);
+
+    setState(() {});
+
+    _doubleTapFeedbackTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) {
+        setState(() {
+          _showDoubleTapFeedback = false;
+          _doubleTapSeekSeconds = 0;
+        });
+      }
+    });
+  }
+
   /// Extra dimming overlay opacity when brightness is set below 30% down to 0%
   /// allows ultra-low, soothing night viewing in pitch-dark rooms.
   double get _dimOverlayOpacity {
@@ -308,12 +361,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _currentBrightness = val.clamp(0.0, 1.0);
     final hwBrightness = _currentBrightness.clamp(0.001, 1.0);
     PipService.setBrightness(hwBrightness);
+    _settings?.setPlayerBrightness(_currentBrightness);
     setState(() {});
   }
 
   void _updateVolume(double val) {
     _currentVolume = val.clamp(0.0, 1.0);
     PipService.setVolume(_currentVolume);
+    _settings?.setPlayerVolume(_currentVolume);
     setState(() {});
   }
 
@@ -363,6 +418,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _resumeNoticeTimer?.cancel();
     _indicatorHideTimer?.cancel();
     _seekPreviewHideTimer?.cancel();
+    _doubleTapFeedbackTimer?.cancel();
     _saveProgress();
 
     final c = _controller;
@@ -962,6 +1018,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         backgroundColor: Colors.black,
         body: GestureDetector(
           onTap: _toggleControls,
+          onDoubleTapDown: _onDoubleTapDown,
+          onDoubleTap: _onDoubleTap,
           onVerticalDragStart: _onVerticalDragStart,
           onVerticalDragUpdate: _onVerticalDragUpdate,
           onVerticalDragEnd: _onVerticalDragEnd,
@@ -1208,6 +1266,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               // YouTube-style Horizontal Seek Preview HUD
               if (_showSeekPreview && !_isLoading && _errorMessage == null && !_isPipMode)
                 _buildSeekPreviewHud(dur),
+
+              // Double Tap Seek Ripple Feedback (Left = -10s, Right = +10s)
+              if (_showDoubleTapFeedback && !_isLoading && _errorMessage == null && !_isPipMode)
+                _buildDoubleTapFeedback(),
             ],
           ),
         ),
@@ -1861,6 +1923,71 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoubleTapFeedback() {
+    final isForward = _doubleTapIsForward;
+    final absSeconds = _doubleTapSeekSeconds.abs();
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      left: isForward ? null : 0,
+      right: isForward ? 0 : null,
+      width: MediaQuery.of(context).size.width * 0.42,
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          opacity: _showDoubleTapFeedback ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 150),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: isForward ? const Alignment(0.7, 0.0) : const Alignment(-0.7, 0.0),
+                radius: 1.0,
+                colors: [
+                  (isForward ? AppTheme.accent : Colors.amber).withOpacity(0.28),
+                  Colors.transparent,
+                ],
+              ),
+              borderRadius: isForward
+                  ? const BorderRadius.horizontal(left: Radius.elliptical(80, 220))
+                  : const BorderRadius.horizontal(right: Radius.elliptical(80, 220)),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isForward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+                    color: Colors.white,
+                    size: 42,
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC141824),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: (isForward ? AppTheme.accent : Colors.amber).withOpacity(0.5),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      isForward ? '+$absSeconds วินาที' : '-$absSeconds วินาที',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
