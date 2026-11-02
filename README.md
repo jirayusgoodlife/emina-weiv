@@ -24,7 +24,7 @@
 
 ### 🖥️ Anime Studio (Backend Server & Web UI)
 - **Web Dashboard**: Intuitive web interface running on `http://localhost:8800` to manage your library.
-- **Automated Metadata & Stream Extractor**: Modular scraping engine supporting platforms such as Anifume, WordPress DooPlay themes, Animenani/Nya, and generic fallback heuristics.
+- **Automated Metadata & Stream Extractor**: Modular scraping engine supporting WordPress DooPlay themes, custom streaming engines (Ani*** / ayN), and generic fallback heuristics.
 - **AI-Powered Scraper Integration**: Optional integration with local LLMs (via Ollama or LM Studio) to inspect and extract video links and metadata from unsupported page structures.
 - **HLS Segment Stripper Proxy**: Rewrites HLS manifests and strips obfuscated image headers from video fragments on the fly.
 - **QR Code Pairing**: Displays local network IP addresses and a QR code for 1-click synchronization with your mobile client.

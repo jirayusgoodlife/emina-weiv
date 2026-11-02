@@ -6,14 +6,16 @@ Server รองรับการดึงข้อมูลอนิเมะ 
 
 ## 🚀 เว็บไซต์และระบบที่รองรับในปัจจุบัน
 
-1. **Anifume (`anifume.com`)**
-   - รองรับหน้าอนิเมะ เช่น `https://anifume.com/40235` (Kaifuku Jutsushi no Yarinaoshi ตอนที่ 1-12)
+> 🔒 *หมายเหตุ: เพื่อความเป็นส่วนตัวและการป้องกันการตรวจจับด้วย Search Engine หรือ AI Web Search ชื่อเว็บไซต์จริงทั้งหมดจะถูกแทนที่ด้วยชื่อย้อนกลับ (Reverse Name: `moc.xxx`) หรือดอกจัน (`***`)*
+
+1. **Emufina (`moc.emufina` / `ani***.com`)**
+   - รองรับหน้าอนิเมะ เช่น `https://ani***.com/40235` (ตัวอย่างซีรีส์อนิเมะ ตอนที่ 1-12)
    - ดึงชื่อเรื่อง, รูปภาพหน้าปก, เรื่องย่อ, และรายการตอนทั้งหมด
-   - ถอดรหัส AJAX Player และดึงลิงก์ตรง `.mp4` คุณภาพสูงจากเซิร์ฟเวอร์ Rukoluo แบบเรียลไทม์
+   - ถอดรหัส AJAX Player และดึงลิงก์ตรง `.mp4` คุณภาพสูงจากเซิร์ฟเวอร์สตรีมมิ่งแบบเรียลไทม์
 2. **เว็บตระกูล WordPress DooPlay**
-   - เช่น `anime-waku.com`, `animekimi.com`, `123-hd.com`, `anime-subthai.com`
+   - เช่น `moc.ukaw-emina` (`a***-waku.com`), `moc.imikemina` (`a***-kimi.com`), `moc.dh-321` (`123-***.com`), `moc.iahttbus-emina` (`a***-subthai.com`)
    - ถอดรหัสผ่าน DooPlay REST API (`/wp-json/dooplayer/v1/post/...`)
-3. **Animenani / Nya Stream**
+3. **Inamenina / ayN Stream (`moc.inamenina` / `a***-nani`)**
    - ถอดรหัส Reverse Base64 Bootstrap Payload จากเครื่องเล่นวิดีโอ
 4. **Universal Generic Handler & Local AI Fallback**
    - รองรับเว็บอนิเมะทั่วไปด้วย Heuristics อัจฉริยะ (ค้นหาแท็ก `<video>`, `<source>`, JWPlayer, Video.js, iframe embed)
@@ -29,13 +31,13 @@ Server รองรับการดึงข้อมูลอนิเมะ 
 
 ### วิธีที่ 1: เพิ่มเว็บใหม่ผ่านไฟล์คอนฟิก `custom_sites.json` (ง่ายที่สุด ไม่ต้องเขียนโค้ด)
 
-เปิดไฟล์ `server/custom_sites.json` แล้วเพิ่มการตั้งค่าของเว็บใหม่ลงใน Array ตัวอย่างเช่น:
+เปิดไฟล์ `server/custom_sites.json` หรือใช้เมนู **จัดการเว็บ (Custom Sites)** บนหน้าเว็บ เพื่อให้ AI สร้างกฎอัตโนมัติ:
 
 ```json
 [
   {
     "name": "ชื่อเว็บตัวอย่าง",
-    "domains": ["my-anime-site.com"],
+    "domains": ["my-anime-site.test"],
     "title_selector": "h1.entry-title, h1.post-title",
     "title_clean_regex": "\\s*ตอนที่\\s*\\d+.*$",
     "cover_selector": ".poster img, .entry-thumbnail img",
@@ -49,7 +51,7 @@ Server รองรับการดึงข้อมูลอนิเมะ 
 ```
 
 #### รายละเอียดฟิลด์:
-- **`domains`**: รายชื่อโดเมนของเว็บ เช่น `["animesite.com"]`
+- **`domains`**: รายชื่อโดเมนของเว็บ เช่น `["animesite.test"]`
 - **`title_selector`**: CSS Selector สำหรับชื่อเรื่อง เช่น `h1.title`
 - **`title_clean_regex`**: Regular Expression สำหรับตัดคำที่ไม่ต้องการออกจากชื่อ เช่น `\s*ตอนที่\s*\d+.*$`
 - **`cover_selector`**: CSS Selector สำหรับรูปภาพโปสเตอร์
@@ -77,7 +79,7 @@ from .base import BaseSiteHandler
 
 class MyCustomSiteHandler(BaseSiteHandler):
     name = "MyCustomSite"
-    domains = ["mycustomanime.com"]
+    domains = ["mycustomanime.test"]
 
     def extract_anime(self, url: str, html: str, soup: BeautifulSoup) -> Optional[Dict[str, Any]]:
         # ดึงชื่อเรื่อง, รูปภาพปก, เรื่องย่อ, และรายการตอน
@@ -122,9 +124,9 @@ from .my_custom_site import MyCustomSiteHandler
 
 def get_all_handlers() -> List[BaseSiteHandler]:
     handlers: List[BaseSiteHandler] = [
-        AnifumeHandler(),
+        EmufinaHandler(),    # หรือ A***fumeHandler
         DooPlayHandler(),
-        AnimenaniHandler(),
+        InameninaHandler(),  # หรือ A***naniHandler
         MyCustomSiteHandler(), # <-- เพิ่มตรงนี้
     ]
     ...
@@ -137,13 +139,13 @@ def get_all_handlers() -> List[BaseSiteHandler]:
 คุณสามารถทดสอบดึงข้อมูลเว็บและสตรีมผ่านสคริปต์ Python ใน virtual environment ได้ทันที:
 
 ```bash
-cd /home/jirayus/Projects/AnimeView/server
+cd server
 .venv/bin/python -c "
 import asyncio
 from extractor import extract_anime
 
 async def test():
-    data = await extract_anime('https://anifume.com/40235', settings={}, use_ai=False)
+    data = await extract_anime('https://ani***.com/40235', settings={}, use_ai=False)
     print('เรื่อง:', data['title'])
     print('รูปปก:', data['cover_url'])
     print('จำนวนตอน:', len(data['episodes']))

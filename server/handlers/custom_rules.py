@@ -26,6 +26,12 @@ class RuleBasedSiteHandler(BaseSiteHandler):
         self.player_ajax_regex = rule.get("player_ajax_regex")
         self.player_iframe_selector = rule.get("player_iframe_selector", "iframe")
         self.stream_regex = rule.get("stream_regex", r"https?://[^\s\"\'<>]+\.(?:m3u8|mp4)[^\s\"\'<>]*")
+        self.requires_proxy = bool(rule.get("requires_proxy", False) or rule.get("proxy_referer"))
+        self.proxy_referer = rule.get("proxy_referer") or (f"https://{rule.get('domains')[0]}/" if rule.get("domains") else "")
+        self.proxy_origin = rule.get("proxy_origin") or ""
+        self.proxy_user_agent = rule.get("proxy_user_agent") or ""
+        self.stream_domains = rule.get("stream_domains", [])
+        self.strip_fake_headers = bool(rule.get("strip_fake_headers", False))
 
     def extract_anime(self, url: str, html: str, soup: BeautifulSoup) -> Optional[Dict[str, Any]]:
         # 1. Title
@@ -97,7 +103,10 @@ class RuleBasedSiteHandler(BaseSiteHandler):
                     "title": text if len(text) > 3 else f"ตอนที่ {int(ep_num) if ep_num.is_integer() else ep_num}",
                     "page_url": full_url,
                     "stream_url": "",
-                    "audio_type": audio_tag
+                    "audio_type": audio_tag,
+                    "requires_proxy": self.requires_proxy,
+                    "proxy_referer": self.proxy_referer,
+                    "proxy_origin": self.proxy_origin
                 })
 
         if not episodes:
@@ -121,6 +130,10 @@ class RuleBasedSiteHandler(BaseSiteHandler):
             "year": "2024",
             "source_url": url,
             "is_movie": False,
+            "requires_proxy": self.requires_proxy,
+            "proxy_referer": self.proxy_referer,
+            "proxy_origin": self.proxy_origin,
+            "stream_domains": self.stream_domains,
             "episodes": episodes
         }
 

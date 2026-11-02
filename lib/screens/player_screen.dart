@@ -587,18 +587,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
         String playableUrl = streamUrl;
 
-        // If stream is from animenani, 24playerhd, stream-aph, maimeorder or protected CDN, route via in-app stripping proxy (runs on phone)
+        // Route via in-app stripping proxy if stream is from protected CDN or custom sites
         final lowerStream = streamUrl.toLowerCase();
-        if (lowerStream.contains('animenani') ||
-            lowerStream.contains('24playerhd') ||
-            lowerStream.contains('orbitalkthai') ||
-            lowerStream.contains('stream-aph') ||
-            lowerStream.contains('qqhls') ||
-            lowerStream.contains('flower.txt') ||
-            lowerStream.contains('maimeorder') ||
-            lowerStream.contains('animemami') ||
-            lowerStream.endsWith('.txt') ||
-            lowerStream.contains('/o/')) {
+        if (InAppStreamProxy.shouldProxyUrl(streamUrl)) {
           if (!InAppStreamProxy.instance.isRunning) {
             await InAppStreamProxy.instance.start();
           }
@@ -612,12 +603,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             playableUrl.contains('flower.txt') ||
             lowerStream.contains('.m3u8') ||
             lowerStream.contains('flower.txt') ||
-            lowerStream.contains('animenani') ||
-            lowerStream.contains('24playerhd') ||
-            lowerStream.contains('stream-aph') ||
-            lowerStream.contains('maimeorder') ||
-            lowerStream.contains('animemami') ||
-            lowerStream.endsWith('.txt') ||
+            InAppStreamProxy.shouldProxyUrl(streamUrl);
             lowerStream.contains('/o/');
 
         final netController = VideoPlayerController.networkUrl(

@@ -336,3 +336,216 @@ def delete_anime(slug: str) -> bool:
         cursor.execute("DELETE FROM episodes WHERE anime_slug = ?", (slug,))
         conn.commit()
         return True
+
+def export_database() -> Dict[str, Any]:
+    """Exports full database with all anime and episodes for migration/backup."""
+    import datetime
+    animes = get_all_anime()
+    return {
+        "version": "1.0",
+        "exported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "anime_count": len(animes),
+        "anime": animes
+    }
+
+def import_database(payload: Any) -> Dict[str, Any]:
+    """
+    Imports anime and episodes into database.
+    - Does NOT delete existing anime in destination database.
+    - If anime already exists:
+        - If episode count differs or new episodes/stream URLs exist, merges and updates episodes.
+    - If anime does not exist:
+        - Inserts the anime and its episodes.
+    """
+    if isinstance(payload, dict):
+        anime_list = payload.get("anime") or payload.get("data") or []
+    elif isinstance(payload, list):
+        anime_list = payload
+    else:
+        raise ValueError("Invalid import payload format. Expected list of anime or object with 'anime' or 'data' array.")
+
+    inserted_new = 0
+    updated_existing = 0
+    unmodified = 0
+    details = []
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        for a in anime_list:
+            slug = a.get("slug")
+            title = a.get("title")
+            source_url = (a.get("source_url") or "").strip()
+            if not title:
+                continue
+            if not slug:
+                import re
+                slug = re.sub(r'[^a-zA-Z0-9\u0E00-\u0E7F]+', '-', title.lower()).strip('-') or f"anime-{len(details)}"
+
+            # Find existing anime in destination DB
+            existing_slug = None
+            cursor.execute("SELECT slug FROM anime WHERE slug = ?", (slug,))
+            row = cursor.fetchone()
+            if row:
+                existing_slug = row["slug"]
+            elif source_url:
+                cursor.execute("SELECT slug FROM anime WHERE RTRIM(source_url, '/') = ?", (source_url.rstrip("/"),))
+                row = cursor.fetchone()
+                if row:
+                    existing_slug = row["slug"]
+            elif title:
+                cursor.execute("SELECT slug FROM anime WHERE LOWER(title) = LOWER(?)", (title.strip(),))
+                row = cursor.fetchone()
+                if row:
+                    existing_slug = row["slug"]
+
+            incoming_eps = a.get("episodes", [])
+
+            if not existing_slug:
+                # 1. New Anime: Insert without touching any existing anime
+                genres_val = a.get("genres", [])
+                genres_str = json.dumps(genres_val) if isinstance(genres_val, (list, dict)) else str(genres_val or "")
+                cursor.execute("""
+                    INSERT INTO anime (slug, title, cover_url, backdrop_url, synopsis, genres, rating, status, year, source_url, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (
+                    slug,
+                    title,
+                    a.get("cover_url", ""),
+                    a.get("backdrop_url", ""),
+                    a.get("synopsis", ""),
+                    genres_str,
+                    a.get("rating", "N/A"),
+                    a.get("status", ""),
+                    a.get("year", ""),
+                    source_url
+                ))
+
+                seen_ids = set()
+                for idx, ep in enumerate(incoming_eps, 1):
+                    ep_num = ep.get("episode_number", idx)
+                    try:
+                        num_val = float(ep_num)
+                        num_str = str(int(num_val)) if num_val.is_integer() else str(num_val)
+                    except Exception:
+                        num_val = float(idx)
+                        num_str = str(idx)
+
+                    ep_id = ep.get("id") or f"{slug}-ep-{num_str}"
+                    if not ep_id.startswith(f"{slug}-"):
+                        ep_id = f"{slug}-{ep_id}"
+                    c = 1
+                    while ep_id in seen_ids:
+                        c += 1
+                        ep_id = f"{slug}-ep-{num_str}-{c}"
+                    seen_ids.add(ep_id)
+
+                    cursor.execute("""
+                        INSERT OR REPLACE INTO episodes (id, anime_slug, episode_number, title, stream_url, page_url, thumbnail_url, duration)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        ep_id,
+                        slug,
+                        num_val,
+                        ep.get("title", f"ตอนที่ {num_str}"),
+                        ep.get("stream_url", ""),
+                        ep.get("page_url", ""),
+                        ep.get("thumbnail_url", a.get("cover_url", "")),
+                        ep.get("duration", "")
+                    ))
+
+                inserted_new += 1
+                details.append({"title": title, "action": "inserted", "episodes": len(incoming_eps)})
+            else:
+                target_slug = existing_slug
+                cursor.execute("SELECT * FROM episodes WHERE anime_slug = ?", (target_slug,))
+                curr_ep_rows = cursor.fetchall()
+                existing_eps = {float(r["episode_number"]): dict(r) for r in curr_ep_rows}
+
+                need_update = False
+                new_eps_count = 0
+                updated_streams_count = 0
+
+                for inc_ep in incoming_eps:
+                    try:
+                        num = float(inc_ep.get("episode_number", 1.0))
+                    except Exception:
+                        continue
+                    if num not in existing_eps:
+                        existing_eps[num] = dict(inc_ep)
+                        new_eps_count += 1
+                        need_update = True
+                    else:
+                        cur = existing_eps[num]
+                        if inc_ep.get("stream_url") and inc_ep["stream_url"] != cur.get("stream_url"):
+                            cur["stream_url"] = inc_ep["stream_url"]
+                            updated_streams_count += 1
+                            need_update = True
+                        if inc_ep.get("page_url") and not cur.get("page_url"):
+                            cur["page_url"] = inc_ep["page_url"]
+                            need_update = True
+                        if inc_ep.get("title") and (not cur.get("title") or cur.get("title").startswith("ตอนที่ ") and not inc_ep.get("title").startswith("ตอนที่ ")):
+                            cur["title"] = inc_ep["title"]
+                            need_update = True
+
+                # If episode count differs, force update
+                if len(curr_ep_rows) != len(existing_eps):
+                    need_update = True
+
+                if need_update:
+                    # Update anime metadata & timestamp
+                    cursor.execute("UPDATE anime SET updated_at = CURRENT_TIMESTAMP WHERE slug = ?", (target_slug,))
+                    cursor.execute("DELETE FROM episodes WHERE anime_slug = ?", (target_slug,))
+
+                    seen_ids = set()
+                    for num_val in sorted(existing_eps.keys()):
+                        ep_data = existing_eps[num_val]
+                        num_str = str(int(num_val)) if num_val.is_integer() else str(num_val)
+                        ep_id = ep_data.get("id") or f"{target_slug}-ep-{num_str}"
+                        if not ep_id.startswith(f"{target_slug}-"):
+                            ep_id = f"{target_slug}-{ep_id}"
+                        c = 1
+                        while ep_id in seen_ids:
+                            c += 1
+                            ep_id = f"{target_slug}-ep-{num_str}-{c}"
+                        seen_ids.add(ep_id)
+
+                        cursor.execute("""
+                            INSERT INTO episodes (id, anime_slug, episode_number, title, stream_url, page_url, thumbnail_url, duration)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            ep_id,
+                            target_slug,
+                            num_val,
+                            ep_data.get("title", f"ตอนที่ {num_str}"),
+                            ep_data.get("stream_url", ""),
+                            ep_data.get("page_url", ""),
+                            ep_data.get("thumbnail_url", a.get("cover_url", "")),
+                            ep_data.get("duration", "")
+                        ))
+
+                    updated_existing += 1
+                    details.append({
+                        "title": title,
+                        "action": "updated",
+                        "previous_episodes": len(curr_ep_rows),
+                        "total_episodes": len(existing_eps),
+                        "new_episodes_added": new_eps_count,
+                        "streams_updated": updated_streams_count
+                    })
+                else:
+                    unmodified += 1
+
+        cursor.execute("SELECT COUNT(*) FROM anime")
+        total_in_db = cursor.fetchone()[0]
+        conn.commit()
+
+    return {
+        "status": "ok",
+        "total_in_file": len(anime_list),
+        "inserted_new": inserted_new,
+        "updated_existing": updated_existing,
+        "unmodified": unmodified,
+        "total_in_db": total_in_db,
+        "details": details
+    }

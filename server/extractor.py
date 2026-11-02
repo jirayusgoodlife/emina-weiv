@@ -162,10 +162,24 @@ def parse_html_heuristics(html: str, base_url: str) -> Dict[str, Any]:
     if handler.name != "Universal Generic Handler":
         custom_data = handler.extract_anime(base_url, html, soup)
         if custom_data:
+            if not custom_data.get("source_url"):
+                custom_data["source_url"] = base_url
+            if custom_data.get("split_collections"):
+                for col in custom_data["split_collections"]:
+                    if not col.get("source_url"):
+                        col["source_url"] = base_url
             return custom_data
 
     # Fallback to universal generic heuristics
-    return GenericHandler().extract_anime(base_url, html, soup)
+    res = GenericHandler().extract_anime(base_url, html, soup)
+    if res:
+        if not res.get("source_url"):
+            res["source_url"] = base_url
+        if res.get("split_collections"):
+            for col in res["split_collections"]:
+                if not col.get("source_url"):
+                    col["source_url"] = base_url
+    return res
 
 async def extract_anime(
     url: str,
@@ -178,6 +192,12 @@ async def extract_anime(
 
     html = await fetch_html(url)
     heuristic_data = parse_html_heuristics(html, url)
+    if not heuristic_data.get("source_url"):
+        heuristic_data["source_url"] = url
+    if heuristic_data.get("split_collections"):
+        for col in heuristic_data["split_collections"]:
+            if not col.get("source_url"):
+                col["source_url"] = url
 
     handler = get_handler_for_url(url, html=html)
     if on_event:

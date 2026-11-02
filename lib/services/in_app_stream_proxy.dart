@@ -16,8 +16,57 @@ class InAppStreamProxy {
   int? get port => _port;
   bool get isRunning => _server != null;
 
-  static Map<String, String> _getCustomHeaders(String url) {
+  static List<Map<String, dynamic>> _dynamicProxyRules = [];
+
+  void updateProxyRules(List<dynamic> rules) {
+    _dynamicProxyRules = rules.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    if (kDebugMode) {
+      print('[InAppProxy] Loaded ${_dynamicProxyRules.length} dynamic proxy rules from server');
+    }
+  }
+
+  static bool shouldProxyUrl(String url) {
     final lower = url.toLowerCase();
+    // 1. Check dynamic proxy rules from server
+    for (final rule in _dynamicProxyRules) {
+      final domains = (rule['match_domains'] as List<dynamic>?)?.map((d) => d.toString().toLowerCase()).toList() ?? [];
+      if (domains.any((d) => lower.contains(d))) {
+        return true;
+      }
+    }
+    // 2. Built-in protected providers
+    return lower.contains('animenani') ||
+        lower.contains('24playerhd') ||
+        lower.contains('orbitalkthai') ||
+        lower.contains('stream-aph') ||
+        lower.contains('qqhls') ||
+        lower.contains('qqstream') ||
+        lower.contains('flower.txt') ||
+        lower.contains('maimeorder') ||
+        lower.contains('animemami') ||
+        lower.contains('fairyanime') ||
+        lower.contains('tonytonychopper') ||
+        lower.endsWith('.txt') ||
+        lower.contains('/o/');
+  }
+
+  static Map<String, String> getCustomHeaders(String url) {
+    final lower = url.toLowerCase();
+
+    // 1. Dynamic proxy rules from synced custom sites (reverse order to prioritize custom rules)
+    for (final rule in _dynamicProxyRules.reversed) {
+      final domains = (rule['match_domains'] as List<dynamic>?)?.map((d) => d.toString().toLowerCase()).toList() ?? [];
+      if (domains.any((d) => lower.contains(d))) {
+        final headersRaw = rule['headers'] as Map<dynamic, dynamic>?;
+        if (headersRaw != null && headersRaw.isNotEmpty) {
+          final res = <String, String>{};
+          headersRaw.forEach((k, v) => res[k.toString()] = v.toString());
+          return res;
+        }
+      }
+    }
+
+    // 2. Built-in defaults
     if (lower.contains('stream-aph') || lower.contains('qqhls') || lower.contains('qqstream')) {
       return {
         'User-Agent':
@@ -76,6 +125,8 @@ class InAppStreamProxy {
       'Accept': '*/*',
     };
   }
+
+  static Map<String, String> _getCustomHeaders(String url) => getCustomHeaders(url);
 
   Future<void> start() async {
     if (_server != null) return;

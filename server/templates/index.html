@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="googlebot" content="noindex, nofollow">
   <title>Anime Studio - AI Scraper & Catalog Server</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,24 +49,206 @@
       background-attachment: fixed;
     }
 
-    /* Header & Navigation */
-    header {
-      background: rgba(10, 13, 20, 0.85);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--card-border);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      padding: 0 2rem;
+    /* Layout with Sidebar */
+    .app-layout {
+      display: flex;
+      min-height: 100vh;
+      width: 100%;
     }
 
-    .header-content {
-      max-width: 1400px;
-      margin: 0 auto;
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 270px;
+      min-width: 270px;
+      background: rgba(12, 16, 26, 0.94);
+      backdrop-filter: blur(20px);
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 200;
+      transition: var(--transition);
+    }
+
+    .sidebar-header {
+      padding: 1.5rem 1.25rem 1.25rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 72px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 1.25rem 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    .nav-section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0.75rem 0.75rem 0.25rem;
+    }
+
+    .nav-item {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+      padding: 11px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: var(--transition);
+      text-align: left;
+      width: 100%;
+      text-decoration: none;
+      font-family: inherit;
+    }
+
+    .nav-item:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.08);
+      transform: translateX(3px);
+    }
+
+    .nav-item.active {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(255, 42, 109, 0.18), rgba(156, 39, 176, 0.15));
+      border: 1px solid rgba(255, 42, 109, 0.45);
+      box-shadow: 0 0 16px rgba(255, 42, 109, 0.2);
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: rgba(255, 42, 109, 0.25);
+      color: #ff2a6d;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 42, 109, 0.4);
+    }
+
+    .sidebar-footer {
+      padding: 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .server-status-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* Main Wrapper */
+    .main-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow-x: hidden;
+    }
+
+    .main-content {
+      flex: 1;
+      width: 100%;
+      max-width: 1350px;
+      margin: 0 auto;
+      padding: 2.5rem 2.5rem 4rem;
+    }
+
+    /* Mobile Topbar */
+    .mobile-topbar {
+      display: none;
+      height: 64px;
+      padding: 0 1.25rem;
+      background: rgba(10, 13, 20, 0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 150;
+    }
+
+    .mobile-hamburger-btn {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 8px;
+    }
+
+    .mobile-nav-toggle {
+      display: none;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.3rem;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 190;
+    }
+
+    @media (max-width: 960px) {
+      .mobile-topbar {
+        display: flex;
+      }
+
+      .mobile-nav-toggle {
+        display: block;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: -280px;
+        height: 100vh;
+        z-index: 200;
+        box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8);
+      }
+
+      .sidebar.open {
+        left: 0;
+      }
+
+      .sidebar-backdrop.open {
+        display: block;
+      }
+
+      .main-content {
+        padding: 1.5rem 1rem 3rem;
+      }
     }
 
     .logo {
@@ -72,49 +256,17 @@
       align-items: center;
       gap: 12px;
       font-weight: 700;
-      font-size: 1.35rem;
+      font-size: 1.25rem;
       letter-spacing: 0.5px;
     }
 
     .logo-badge {
       background: linear-gradient(135deg, var(--primary), #9c27b0);
       color: white;
-      padding: 6px 12px;
+      padding: 5px 10px;
       border-radius: 8px;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       box-shadow: 0 0 15px var(--primary-glow);
-    }
-
-    .nav-tabs {
-      display: flex;
-      gap: 8px;
-    }
-
-    .tab-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 0.95rem;
-      font-weight: 500;
-      padding: 10px 18px;
-      border-radius: 10px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      transition: var(--transition);
-    }
-
-    .tab-btn:hover {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.04);
-    }
-
-    .tab-btn.active {
-      color: #fff;
-      background: rgba(255, 42, 109, 0.15);
-      border: 1px solid rgba(255, 42, 109, 0.4);
-      box-shadow: 0 0 12px rgba(255, 42, 109, 0.2);
     }
 
     .sync-status-badge {
@@ -125,7 +277,7 @@
       border: 1px solid rgba(0, 230, 118, 0.3);
       padding: 6px 14px;
       border-radius: 20px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--success);
     }
 
@@ -142,15 +294,6 @@
       0% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.4; transform: scale(0.9); }
       100% { opacity: 1; transform: scale(1); }
-    }
-
-    /* Main Container */
-    main {
-      flex: 1;
-      max-width: 1400px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 2.5rem 2rem;
     }
 
     .tab-panel {
@@ -590,42 +733,76 @@
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="header-content">
-      <div class="logo">
-        <span class="logo-badge">AI Studio</span>
-        <span>AnimeView Backend</span>
+  <!-- Mobile Backdrop -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- Sidebar Menu -->
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-badge">AI Studio</span>
+          <span style="font-size: 1.15rem; font-weight: 700;">AnimeView</span>
+        </div>
+        <button class="mobile-nav-toggle" onclick="toggleSidebar()" aria-label="Close Sidebar">✕</button>
       </div>
 
-      <nav class="nav-tabs">
-        <button class="tab-btn active" onclick="switchTab('extractor')">
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">เมนูสตูดิโอ (STUDIO)</div>
+        <button class="nav-item active" onclick="switchTab('extractor')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-          ดึงข้อมูลด้วย AI
+          <span>ดึงข้อมูลด้วย AI</span>
         </button>
-        <button class="tab-btn" onclick="switchTab('catalog')">
+        <button class="nav-item" onclick="switchTab('catalog')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
-          แคตตาล็อกหนัง (<span id="catalogCount">0</span>)
+          <span>แคตตาล็อกหนัง</span>
+          <span class="nav-badge" id="catalogCount">0</span>
         </button>
-        <button class="tab-btn" onclick="switchTab('sync')">
+        <button class="nav-item" onclick="switchTab('custom-sites')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          <span>จัดการเว็บ (Custom Sites)</span>
+        </button>
+
+        <div class="nav-section-title" style="margin-top: 1.25rem;">การเชื่อมต่อและระบบ</div>
+        <button class="nav-item" onclick="switchTab('sync')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          ซิงค์กับ Flutter
+          <span>ซิงค์กับ Flutter</span>
         </button>
-        <button class="tab-btn" onclick="switchTab('settings')">
+        <button class="nav-item" onclick="switchTab('settings')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          ตั้งค่า Local LLM
+          <span>ตั้งค่า Local LLM</span>
         </button>
       </nav>
 
-      <div class="sync-status-badge">
-        <span class="status-dot"></span>
-        <span>Local Server Ready</span>
+      <div class="sidebar-footer">
+        <div class="server-status-card">
+          <div class="sync-status-badge">
+            <span class="status-dot"></span>
+            <span>Local Server Active</span>
+          </div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;" id="sidebarPortInfo">Server on port 8800</div>
+        </div>
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <!-- Main Body -->
-  <main>
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+      <!-- Mobile Top Bar -->
+      <div class="mobile-topbar">
+        <button class="mobile-hamburger-btn" onclick="toggleSidebar()" aria-label="Open Sidebar Menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="logo">
+          <span class="logo-badge">AI Studio</span>
+          <span style="font-weight: 700;">AnimeView</span>
+        </div>
+        <div class="sync-status-badge" style="padding: 4px 8px; font-size: 0.75rem;">
+          <span class="status-dot"></span>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
     <!-- TAB 1: AI Scraper Studio -->
     <section id="tab-extractor" class="tab-panel active">
       <div class="glass-card">
@@ -649,7 +826,7 @@
         <!-- Single URL Mode -->
         <div id="singleModeSection">
           <div class="input-row">
-            <input type="text" id="targetUrl" placeholder="วาง URL เว็บดูหนังหรืออนิเมะ เช่น https://anifume.com/40235 หรือ https://anime-waku.com/..." />
+            <input type="text" id="targetUrl" placeholder="วาง URL เว็บดูหนังหรืออนิเมะ เช่น https://ani***.com/40235 หรือ https://moc.ukaw-emina/..." />
             <button id="extractBtn" class="btn btn-primary" onclick="startExtraction()">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               วิเคราะห์ด้วย AI
@@ -684,7 +861,7 @@
               <label style="margin: 0; font-size: 0.88rem;">รายการลิงก์เว็บที่ต้องการดึง (วางได้หลายเรื่อง บรรทัดละ 1 ลิงก์):</label>
               <span id="batchUrlCountBadge" style="font-size: 0.82rem; padding: 3px 12px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3);">0 เรื่อง</span>
             </div>
-            <textarea id="batchUrls" rows="6" placeholder="วางลิงก์ที่นี่ บรรทัดละ 1 เรื่อง เช่น&#10;https://anifume.com/40235&#10;https://anime-waku.com/movies/chainsaw-man-movie-reze-hen/&#10;https://anifume.com/41771&#10;https://anime-waku.com/anime/frieren-sub/" style="resize: vertical; font-family: monospace; font-size: 0.9rem; line-height: 1.5; padding: 12px;" oninput="updateBatchUrlCount()"></textarea>
+            <textarea id="batchUrls" rows="6" placeholder="วางลิงก์ที่นี่ บรรทัดละ 1 เรื่อง เช่น&#10;https://ani***.com/40235&#10;https://a***-waku.com/movies/chainsaw-man-movie-reze-hen/&#10;https://moc.emufina/41771&#10;https://moc.ukaw-emina/anime/frieren-sub/" style="resize: vertical; font-family: monospace; font-size: 0.9rem; line-height: 1.5; padding: 12px;" oninput="updateBatchUrlCount()"></textarea>
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
@@ -763,15 +940,21 @@
 
       <!-- Result Edit Section (Hidden initially) -->
       <div id="extractionResultCard" class="glass-card" style="display: none;">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div>
             <h2 class="section-title">ตรวจสอบและบันทึกอนิเมะ</h2>
             <p class="section-subtitle">คุณสามารถแก้ไขข้อมูลหรือลิงก์สตรีมก่อนบันทึกเข้าสู่ฐานข้อมูล SQLite ได้</p>
           </div>
-          <button class="btn btn-accent" onclick="saveExtractedAnime()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-            บันทึกเข้าแคตตาล็อก
-          </button>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline" id="btnUpdateEpisodes" onclick="updateEpisodesInStudio()" style="display: inline-flex; align-items: center; gap: 6px; border-color: var(--accent); color: var(--accent);" title="ดึงข้อมูลตอนใหม่ล่าสุดจากเว็บต้นทาง">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              <span>อัปเดตตอน</span>
+            </button>
+            <button type="button" class="btn btn-accent" onclick="saveExtractedAnime()" style="display: inline-flex; align-items: center; gap: 6px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              <span>บันทึกเข้าแคตตาล็อก</span>
+            </button>
+          </div>
         </div>
 
         <!-- Audio Collections Selector (If Sub & Dub detected) -->
@@ -795,6 +978,13 @@
             <div class="form-group">
               <label>Slug / ID</label>
               <input type="text" id="editSlug" />
+            </div>
+            <div class="form-group">
+              <label>URL เว็บต้นทาง (Source URL)</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="editSourceUrl" placeholder="https://..." style="font-size: 0.85rem;" />
+                <a id="editSourceUrlLink" href="#" target="_blank" class="btn btn-outline" style="padding: 6px 10px; font-size: 0.8rem; display: none; align-items: center;" title="เปิดดูหน้าเว็บต้นทาง">🔗</a>
+              </div>
             </div>
           </div>
 
@@ -860,15 +1050,25 @@
     <!-- TAB 2: Anime Catalog Grid -->
     <section id="tab-catalog" class="tab-panel">
       <div class="glass-card">
-        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
           <div>
             <h2 class="section-title">คลังหนังและอนิเมะในฐานข้อมูล</h2>
-            <p class="section-subtitle">ข้อมูลทั้งหมดนี้จะถูกส่งไปยังแอป Flutter ผ่านการซิงค์แบบ Isar</p>
+            <p class="section-subtitle">ข้อมูลทั้งหมดนี้จะถูกส่งไปยังแอป Flutter หรือส่งออก/นำเข้าเพื่อย้ายเว็บได้ทันที</p>
           </div>
-          <button class="btn btn-outline" onclick="loadCatalog()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            รีเฟรช
-          </button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-outline" onclick="exportDatabase()" title="ดาวน์โหลดฐานข้อมูลเป็นไฟล์ JSON สำรองหรือย้ายเว็บ">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              ส่งออก DB (Export)
+            </button>
+            <button class="btn btn-outline" style="border-color: var(--accent); color: var(--accent);" onclick="openImportDatabaseModal()" title="นำเข้าฐานข้อมูลจากไฟล์ JSON โดยไม่ลบเรื่องเดิม และอัปเดตตอนให้อัตโนมัติ">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              นำเข้า DB (Import)
+            </button>
+            <button class="btn btn-outline" onclick="loadCatalog()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              รีเฟรช
+            </button>
+          </div>
         </div>
 
         <div id="catalogGrid" class="anime-grid">
@@ -983,7 +1183,255 @@
         <div id="testLlmResult" style="margin-top: 15px; font-size: 0.9rem;"></div>
       </div>
     </section>
-  </main>
+
+    <!-- TAB 5: Custom Sites & Local AI Rule Generator -->
+    <section id="tab-custom-sites" class="tab-panel">
+      <div class="glass-card" style="margin-bottom: 2rem;">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2 class="section-title">จัดการเว็บไซต์และ AI Site Rule Generator</h2>
+            <p class="section-subtitle">สร้างกฎดึงข้อมูลอนิเมะสำหรับเว็บใหม่ด้วย Local AI LLM หรืออัปโหลด/ดาวน์โหลดไฟล์ <code>custom_sites.json</code></p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-outline" onclick="downloadCustomSites()" title="ดาวน์โหลดไฟล์ custom_sites.json เก็บไว้">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              ดาวน์โหลด custom_sites.json
+            </button>
+            <input type="file" id="customSitesFileInput" accept=".json,application/json" style="display: none;" onchange="uploadCustomSitesFile(event)">
+            <button class="btn btn-outline" style="border-color: var(--accent); color: var(--accent);" onclick="document.getElementById('customSitesFileInput').click()" title="อัปโหลดไฟล์ custom_sites.json เข้าเซิร์ฟเวอร์">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              อัปโหลด custom_sites.json
+            </button>
+            <button class="btn btn-outline" onclick="resetRuleForm()">
+              ➕ เพิ่มกฎใหม่
+            </button>
+          </div>
+        </div>
+
+        <!-- AI Rule Generator Card -->
+        <div style="background: rgba(17, 21, 34, 0.7); border: 1px solid rgba(255, 42, 109, 0.25); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2rem;">
+          <h3 style="font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.3rem;">🤖</span> ให้ Local AI สร้างกฎของเว็บใหม่อัตโนมัติ
+          </h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+            ใส่ URL หน้าอนิเมะของเว็บใหม่ที่ต้องการเพิ่ม ระบบจะดึงโครงสร้างหน้าเว็บและส่งให้ Local LLM (Ollama หรือ LM Studio) วิเคราะห์ CSS Selectors และ Regex ให้ทันที พร้อมทดสอบผลลัพธ์
+          </p>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <input type="text" id="aiSiteUrl" placeholder="ใส่ลิงก์หน้าอนิเมะ เช่น https://new-anime-site.com/series/naruto-shippuden" style="flex: 1; min-width: 280px;" />
+              <button id="btnGenerateAiRule" class="btn btn-primary" onclick="generateRuleWithAI()" style="white-space: nowrap; padding: 0 20px;">
+                <span id="aiRuleSpinner" class="spinner" style="display: none;"></span>
+                <span>🤖 สร้างกฎด้วย AI</span>
+              </button>
+            </div>
+            <div>
+              <input type="text" id="aiSiteHint" placeholder="คำแนะนำเพิ่มเติมให้ AI (ไม่บังคับ) เช่น เว็บนี้ใช้ WordPress DooPlay หรือ ลิงก์ตอนอยู่ในคลาส .episodes-box" style="font-size: 0.85rem;" />
+            </div>
+          </div>
+
+          <!-- Progress / Logs Stream Box -->
+          <div id="aiRuleProgressBox" style="display: none; margin-top: 15px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px 16px; font-size: 0.88rem;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: var(--accent);">
+              <div class="spinner" style="width: 14px; height: 14px;"></div>
+              <strong id="aiRuleProgressTitle">กำลังวิเคราะห์โครงสร้างหน้าเว็บ...</strong>
+            </div>
+            <div id="aiRuleLogs" style="font-family: monospace; font-size: 0.82rem; color: #cbd5e1; max-height: 120px; overflow-y: auto; white-space: pre-wrap;"></div>
+          </div>
+        </div>
+
+        <!-- Live Test Result Preview (Appears when tested or generated) -->
+        <div id="ruleTestPreview" style="display: none; background: rgba(22, 27, 38, 0.9); border: 1px solid var(--accent); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="font-size: 1.1rem; display: flex; align-items: center; gap: 8px; color: var(--accent);">
+              🧪 ผลการทดสอบกฎกับหน้าเว็บจริง
+            </h3>
+            <span id="ruleTestBadge" class="badge badge-success">ตรวจพบ 0 ตอน</span>
+          </div>
+
+          <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div id="ruleTestCoverBox" style="width: 120px; flex-shrink: 0; border-radius: 8px; overflow: hidden; background: #000; border: 1px solid rgba(255,255,255,0.1); min-height: 160px; display: flex; align-items: center; justify-content: center;">
+              <img id="ruleTestCoverImg" src="" alt="Cover" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+              <span id="ruleTestNoCover" style="font-size: 0.75rem; color: var(--text-muted);">ไม่มีรูปปก</span>
+            </div>
+            <div style="flex: 1; min-width: 250px;">
+              <h4 id="ruleTestTitle" style="font-size: 1.2rem; margin-bottom: 6px; color: #fff;">ชื่อเรื่องอนิเมะ</h4>
+              <p id="ruleTestSynopsis" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; max-height: 60px; overflow: hidden;">เรื่องย่อ...</p>
+              <div id="ruleTestEpCountText" style="font-size: 0.9rem; font-weight: 600; color: var(--accent); margin-bottom: 8px;">จำนวนตอนที่ดึงได้: 0 ตอน</div>
+              <div id="ruleTestEpList" style="max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 6px 12px; font-size: 0.82rem; font-family: monospace;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Site Rule Editor Form -->
+        <div id="ruleFormContainer" style="background: rgba(17, 21, 34, 0.5); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 2rem;">
+          <h3 id="ruleFormHeaderTitle" style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
+            ✏️ ปรับแต่งการตั้งค่ากฎเว็บไซต์ (Rule Configuration)
+          </h3>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+            <div class="form-group">
+              <label>ชื่อเว็บไซต์ (Site Name)</label>
+              <input type="text" id="ruleName" placeholder="เช่น Custom Site, DooPlay Site" />
+            </div>
+            <div class="form-group">
+              <label>โดเมนที่รองรับ (Domains - คั่นด้วยเครื่องหมายจุลภาค)</label>
+              <input type="text" id="ruleDomains" placeholder="เช่น custom-site.com, anime-site.org" />
+            </div>
+            <div class="form-group">
+              <label>CSS Selector ชื่อเรื่อง (title_selector)</label>
+              <input type="text" id="ruleTitleSelector" placeholder="h1.entry-title, h1.post-title, h1" />
+            </div>
+            <div class="form-group">
+              <label>Regex ตัดคำไม่ต้องการออกจากชื่อ (title_clean_regex)</label>
+              <input type="text" id="ruleTitleCleanRegex" value="\s*ตอนที่\s*\d+.*$" />
+            </div>
+            <div class="form-group">
+              <label>CSS Selector รูปภาพปก (cover_selector)</label>
+              <input type="text" id="ruleCoverSelector" placeholder=".poster img, .entry-thumbnail img, .post-content-img img" />
+            </div>
+            <div class="form-group">
+              <label>CSS Selector เรื่องย่อ (synopsis_selector)</label>
+              <input type="text" id="ruleSynopsisSelector" placeholder=".entry-content p, .synopsis, .content-des p" />
+            </div>
+            <div class="form-group">
+              <label>CSS Selector ลิงก์ตอนทั้งหมด (episodes_selector)</label>
+              <input type="text" id="ruleEpisodesSelector" placeholder=".episode-list a, .eplink a, .eplister ul li a" />
+            </div>
+            <div class="form-group">
+              <label>Regex ดึงหมายเลขตอน (episode_number_regex)</label>
+              <input type="text" id="ruleEpNumRegex" value="(?:ตอนที่|ep(?:isode)?)[-_.\s]*(\d+(?:\.\d+)?)" />
+            </div>
+            <div class="form-group">
+              <label>Regex ค้นหาวิดีโอสตรีม (.mp4 / .m3u8) (stream_regex)</label>
+              <input type="text" id="ruleStreamRegex" value="https?://[^\s&quot;'&lt;&gt;]+(?:\.m3u8|\.mp4)[^\s&quot;'&lt;&gt;]*" />
+            </div>
+            <div class="form-group">
+              <label>Regex AJAX Player Endpoint (ถ้ามี) (player_ajax_regex)</label>
+              <input type="text" id="rulePlayerAjax" placeholder="เช่น url:\s*[&quot;'](/ajax/player/[^&quot;']+)[&quot;']" />
+            </div>
+          </div>
+
+          <!-- Stream Proxy & Anti-Hotlinking Section -->
+          <div style="margin-top: 1.25rem; padding: 1.25rem; background: rgba(5, 217, 232, 0.05); border: 1px solid rgba(5, 217, 232, 0.25); border-radius: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="ruleRequiresProxy" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);" onchange="toggleProxyFields()" />
+                <label for="ruleRequiresProxy" style="margin: 0; cursor: pointer; font-weight: 600; color: #fff; text-transform: none; font-size: 0.95rem;">
+                  🛡️ วิดีโอต้องเล่นผ่าน Proxy (Anti-Hotlinking / Referer Check)
+                </label>
+              </div>
+              <span style="font-size: 0.78rem; color: var(--accent); background: rgba(5, 217, 232, 0.15); padding: 3px 8px; border-radius: 4px;">
+                มือถือจะดึงการตั้งค่านี้ไปใช้ใน In-App Stream Proxy อัตโนมัติเมื่อ Sync
+              </span>
+            </div>
+
+            <div id="proxyFieldsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;">
+              <div class="form-group" style="margin: 0;">
+                <label>Referer สำหรับ Proxy (proxy_referer)</label>
+                <input type="text" id="ruleProxyReferer" placeholder="เช่น https://myanime.com/ หรือ player URL" />
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label>Origin สำหรับ Proxy (proxy_origin)</label>
+                <input type="text" id="ruleProxyOrigin" placeholder="เช่น https://myanime.com (ไม่บังคับ)" />
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label>โดเมนของวิดีโอที่ต้องผ่าน Proxy (stream_domains - คั่นด้วยจุลภาค)</label>
+                <input type="text" id="ruleStreamDomains" placeholder="เช่น cdn.stream.xyz, video-provider.net" />
+              </div>
+              <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 8px; padding-top: 24px;">
+                <input type="checkbox" id="ruleStripFakeHeaders" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);" />
+                <label for="ruleStripFakeHeaders" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.88rem; color: var(--text);">
+                  ตัด Fake Image Header (PNG/WebP ใน MPEG-TS)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+            <button class="btn btn-outline" onclick="testCurrentRule()">
+              🧪 ทดสอบกฎอีกครั้ง
+            </button>
+            <button class="btn btn-primary" onclick="saveCurrentRule()">
+              💾 บันทึกลง custom_sites.json
+            </button>
+          </div>
+        </div>
+
+        <!-- Registered Custom Sites List -->
+        <div>
+          <h3 style="font-size: 1.15rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
+            📋 รายการเว็บไซต์ใน <code>custom_sites.json</code> (<span id="customSitesCount">0</span> เว็บ)
+          </h3>
+          <div id="customSitesList" style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Raw JSON Editor Accordion -->
+        <div style="margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 1.5rem;">
+          <details style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px 16px; border: 1px solid rgba(255,255,255,0.06);">
+            <summary style="cursor: pointer; font-weight: 600; color: var(--text-muted); outline: none;">
+              📝 ดูหรือแก้ไขโค้ด <code>custom_sites.json</code> โดยตรง (Raw JSON Editor)
+            </summary>
+            <div style="margin-top: 12px;">
+              <textarea id="rawCustomSitesJson" style="width: 100%; height: 260px; font-family: monospace; font-size: 0.85rem; background: #0b0f19; color: #38bdf8; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 12px;"></textarea>
+              <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+                <button class="btn btn-outline" onclick="loadCustomSites()">รีเซ็ตกลับเป็นค่าเดิม</button>
+                <button class="btn btn-primary" onclick="saveRawCustomSitesJson()">💾 บันทึก JSON ทั้งหมด</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+      </main>
+    </div> <!-- .main-wrapper -->
+  </div> <!-- .app-layout -->
+
+  <!-- Import Database Modal -->
+  <div id="importDbModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 style="font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          นำเข้าฐานข้อมูลอนิเมะ (Import Database)
+        </h3>
+        <button class="btn btn-outline" style="padding: 4px 10px;" onclick="closeImportDatabaseModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 16px;">
+        <div style="background: rgba(5, 217, 232, 0.08); border: 1px solid rgba(5, 217, 232, 0.25); border-radius: 8px; padding: 12px 16px; font-size: 0.9rem; line-height: 1.5; color: #bae6fd;">
+          💡 <strong>คุณสมบัติการรวมฐานข้อมูล (Smart Merge & Migration):</strong>
+          <ul style="margin-left: 20px; margin-top: 6px;">
+            <li><strong>ไม่ลบเรื่องอื่น:</strong> หากในเว็บมี anime เรื่องอื่นอยู่แล้ว จะไม่ถูกลบ</li>
+            <li><strong>อัปเดตตอนให้อัตโนมัติ:</strong> หากเรื่องซ้ำแต่จำนวนตอนไม่เท่ากัน หรือมีตอนใหม่ ระบบจะผสานและอัปเดตตอนให้ทันที</li>
+            <li><strong>เพิ่มเรื่องใหม่:</strong> หากเป็นเรื่องที่ยังไม่มีในเว็บนี้ จะเพิ่มเข้าไปให้อัตโนมัติ</li>
+          </ul>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.9rem; margin-bottom: 6px; color: var(--text-muted);">เลือกไฟล์ฐานข้อมูลสำรอง (.json)</label>
+          <input type="file" id="dbFileInput" accept=".json,application/json" style="width: 100%; padding: 10px; background: var(--input-bg); border: 1px dashed rgba(255,255,255,0.2); border-radius: 8px; color: var(--text);" onchange="onDbFileSelected(event)">
+        </div>
+
+        <div id="importDbProgress" style="display: none; text-align: center; padding: 12px; color: var(--accent);">
+          <div class="spinner" style="display: inline-block; margin-bottom: 8px;"></div>
+          <div>กำลังประมวลผลและผสานข้อมูลเข้าฐานข้อมูล...</div>
+        </div>
+
+        <div id="importDbResult" style="display: none; background: rgba(0, 230, 118, 0.1); border: 1px solid var(--success); border-radius: 8px; padding: 14px; font-size: 0.9rem;">
+          <!-- Result summary dynamically populated -->
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;">
+          <button class="btn btn-outline" onclick="closeImportDatabaseModal()">ปิด</button>
+          <button id="startImportDbBtn" class="btn btn-primary" onclick="submitImportDatabase()" disabled>
+            🚀 นำเข้าข้อมูลทันที
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Video Test Player Modal -->
   <div id="videoModal" class="modal-backdrop">
@@ -1017,15 +1465,42 @@
     }
 
     function switchTab(tabId) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-btn, .nav-item').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
 
-      event.currentTarget.classList.add('active');
-      document.getElementById(`tab-${tabId}`).classList.add('active');
+      const navBtn = document.querySelector(`.nav-item[onclick*="${tabId}"]`);
+      if (navBtn) navBtn.classList.add('active');
+
+      const targetPanel = document.getElementById(`tab-${tabId}`);
+      if (targetPanel) targetPanel.classList.add('active');
+
+      closeSidebar();
 
       if (tabId === 'catalog') loadCatalog();
       if (tabId === 'sync') loadServerInfo();
       if (tabId === 'settings') loadSettings();
+      if (tabId === 'custom-sites') loadCustomSites();
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('appSidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      if (!sidebar) return;
+      const isOpen = sidebar.classList.contains('open');
+      if (isOpen) {
+        sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('active');
+      } else {
+        sidebar.classList.add('open');
+        if (backdrop) backdrop.classList.add('active');
+      }
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('appSidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      if (sidebar) sidebar.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('active');
     }
 
     // Toggle LLM Provider form fields
@@ -1614,6 +2089,7 @@
       col.year = document.getElementById('editYear').value.trim();
       col.genres = document.getElementById('editGenres').value.split(',').map(s => s.trim()).filter(Boolean);
       col.synopsis = document.getElementById('editSynopsis').value.trim();
+      col.source_url = document.getElementById('editSourceUrl').value.trim();
       col.episodes = episodes;
     }
 
@@ -1654,6 +2130,18 @@
       document.getElementById('editYear').value = data.year || '2024';
       document.getElementById('editGenres').value = Array.isArray(data.genres) ? data.genres.join(', ') : '';
       document.getElementById('editSynopsis').value = data.synopsis || '';
+
+      const sourceUrl = data.source_url || (currentAnimeData && currentAnimeData.source_url) || document.getElementById('targetUrl').value.trim() || '';
+      document.getElementById('editSourceUrl').value = sourceUrl;
+      const linkBtn = document.getElementById('editSourceUrlLink');
+      if (linkBtn) {
+        if (sourceUrl && sourceUrl.startsWith('http')) {
+          linkBtn.href = sourceUrl;
+          linkBtn.style.display = 'inline-flex';
+        } else {
+          linkBtn.style.display = 'none';
+        }
+      }
 
       const tbody = document.getElementById('episodesTableBody');
       tbody.innerHTML = '';
@@ -1702,6 +2190,92 @@
       updateEpCount();
     }
 
+    async function updateEpisodesInStudio() {
+      const sourceUrl = document.getElementById('editSourceUrl').value.trim() ||
+                        (currentAnimeData && currentAnimeData.source_url) ||
+                        document.getElementById('targetUrl').value.trim();
+      const slug = document.getElementById('editSlug').value.trim();
+
+      if (!sourceUrl || !sourceUrl.startsWith('http')) {
+        showToast('กรุณาระบุ URL เว็บต้นทาง (Source URL) ก่อนทำการอัปเดตตอน', 'warning');
+        return;
+      }
+
+      const btn = document.getElementById('btnUpdateEpisodes');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span> กำลังดึงตอนใหม่...`;
+
+      try {
+        showToast('กำลังเชื่อมต่อไปยังเว็บต้นทางเพื่อตรวจสอบตอนใหม่...');
+        let res = await fetch(`/api/anime/${encodeURIComponent(slug)}/update_episodes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_url: sourceUrl, use_ai: false })
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          currentAnimeData = result.anime;
+          renderExtractionResult(result.anime);
+          loadCatalog();
+          if (result.new_episodes_added > 0) {
+            showToast(`🎉 อัปเดตสำเร็จ! เพิ่มตอนใหม่ ${result.new_episodes_added} ตอน (รวม ${result.current_count} ตอน)`);
+          } else {
+            showToast(`เป็นตอนล่าสุดแล้ว (ทั้งหมด ${result.current_count} ตอน)`);
+          }
+        } else {
+          // Fallback if not saved in database yet: extract directly and merge into table
+          const extractRes = await fetch('/api/extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: sourceUrl, use_ai: false })
+          });
+          if (!extractRes.ok) throw new Error(await extractRes.text());
+          const freshData = await extractRes.json();
+
+          const existingEps = {};
+          document.querySelectorAll('#episodesTableBody tr').forEach(tr => {
+            const num = parseFloat(tr.querySelector('.ep-num').value);
+            const title = tr.querySelector('.ep-title').value;
+            const stream = tr.querySelector('.ep-stream').value;
+            existingEps[num] = { episode_number: num, title: title, stream_url: stream };
+          });
+
+          let newAdded = 0;
+          (freshData.episodes || []).forEach(ep => {
+            const num = parseFloat(ep.episode_number || 1);
+            if (!existingEps[num]) {
+              existingEps[num] = ep;
+              newAdded++;
+            } else if (ep.stream_url && !existingEps[num].stream_url) {
+              existingEps[num].stream_url = ep.stream_url;
+            }
+          });
+
+          const mergedEps = Object.values(existingEps).sort((a, b) => a.episode_number - b.episode_number);
+          if (currentAnimeData) {
+            currentAnimeData.episodes = mergedEps;
+            currentAnimeData.source_url = sourceUrl;
+          }
+          freshData.episodes = mergedEps;
+          freshData.source_url = sourceUrl;
+          renderExtractionResult(freshData);
+
+          if (newAdded > 0) {
+            showToast(`🎉 ตรวจพบตอนใหม่ ${newAdded} ตอนจากเว็บต้นทาง! (รวม ${mergedEps.length} ตอน) กดบันทึกเข้าแคตตาล็อกได้เลย`);
+          } else {
+            showToast(`เป็นตอนล่าสุดแล้ว (ทั้งหมด ${mergedEps.length} ตอน)`);
+          }
+        }
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการอัปเดตตอน: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+
     async function saveExtractedAnime() {
       if (currentAnimeData && currentAnimeData.split_collections) {
         saveFormToCurrentCollection();
@@ -1733,6 +2307,10 @@
         });
       });
 
+      const sourceUrl = document.getElementById('editSourceUrl').value.trim() ||
+                        (currentAnimeData && currentAnimeData.source_url) ||
+                        document.getElementById('targetUrl').value.trim();
+
       const payload = {
         slug: slug,
         title: document.getElementById('editTitle').value.trim(),
@@ -1743,7 +2321,7 @@
         year: document.getElementById('editYear').value.trim(),
         genres: document.getElementById('editGenres').value.split(',').map(s => s.trim()).filter(Boolean),
         synopsis: document.getElementById('editSynopsis').value.trim(),
-        source_url: document.getElementById('targetUrl').value.trim(),
+        source_url: sourceUrl,
         episodes: episodes,
         split_collections: (currentAnimeData && currentAnimeData.split_collections) ? currentAnimeData.split_collections : undefined
       };
@@ -1761,6 +2339,37 @@
         loadCatalog();
       } catch (e) {
         showToast('เกิดข้อผิดพลาดในการบันทึก: ' + e.message, 'error');
+      }
+    }
+
+    function extractDomain(url) {
+      if (!url) return '';
+      try {
+        return new URL(url).hostname.replace(/^www\./, '');
+      } catch (e) {
+        return url.split('/')[2] || url;
+      }
+    }
+
+    async function updateAnimeEpisodesDirectly(slug) {
+      showToast(`กำลังดึงตอนใหม่ของเรื่อง "${slug}" จากเว็บต้นทาง...`);
+      try {
+        const res = await fetch(`/api/anime/${encodeURIComponent(slug)}/update_episodes`, {
+          method: 'POST'
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'อัปเดตไม่สำเร็จ');
+        }
+        const result = await res.json();
+        loadCatalog();
+        if (result.new_episodes_added > 0) {
+          showToast(`🎉 อัปเดต "${result.title}" สำเร็จ! เพิ่มตอนใหม่ ${result.new_episodes_added} ตอน (รวม ${result.current_count} ตอน)`);
+        } else {
+          showToast(`"${result.title}" เป็นตอนล่าสุดแล้ว (${result.current_count} ตอน)`);
+        }
+      } catch (e) {
+        showToast(`อัปเดตไม่สำเร็จ: ${e.message}`, 'error');
       }
     }
 
@@ -1783,6 +2392,10 @@
           const card = document.createElement('div');
           card.className = 'anime-card';
           const epCount = a.episodes ? a.episodes.length : (a.episode_count || 0);
+          const domain = a.source_url ? extractDomain(a.source_url) : '';
+          const sourceBadge = domain
+            ? `<a href="${a.source_url}" target="_blank" style="text-decoration: none; font-size: 0.72rem; color: var(--accent); background: rgba(5, 217, 232, 0.1); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(5, 217, 232, 0.25);" title="เปิดเว็บต้นทาง: ${a.source_url}">🌐 ${domain}</a>`
+            : `<span style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 2px 7px; border-radius: 4px;">Manual</span>`;
 
           card.innerHTML = `
             <div class="anime-poster-box">
@@ -1790,13 +2403,22 @@
               <div class="anime-ep-badge">${epCount} ตอน</div>
             </div>
             <div class="anime-info">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
+                ${sourceBadge}
+                <span style="font-size: 0.75rem; color: var(--text-muted);">${epCount} ตอน</span>
+              </div>
               <h4 class="anime-card-title">${a.title}</h4>
               <div class="anime-genres">
                 ${(a.genres || []).slice(0, 3).map(g => `<span class="genre-tag">${g}</span>`).join('')}
               </div>
-              <div class="anime-actions">
-                <button class="btn btn-outline" style="flex: 1; padding: 6px;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
-                <button class="btn btn-danger" style="padding: 6px 12px;" onclick="deleteAnime('${a.slug}')">ลบ</button>
+              <div class="anime-actions" style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+                ${a.source_url ? `
+                  <button class="btn btn-outline" style="padding: 6px 10px; font-size: 0.8rem; border-color: rgba(5, 217, 232, 0.4); color: var(--accent);" onclick="updateAnimeEpisodesDirectly('${a.slug}')" title="ดึงตอนใหม่จากเว็บต้นทางทันที">
+                    🔄 อัปเดตตอน
+                  </button>
+                ` : ''}
+                <button class="btn btn-outline" style="flex: 1; padding: 6px; font-size: 0.8rem;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
+                <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem;" onclick="deleteAnime('${a.slug}')">ลบ</button>
               </div>
             </div>
           `;
@@ -1809,7 +2431,7 @@
 
     function editAnimeInStudio(anime) {
       currentAnimeData = anime;
-      document.querySelector('.tab-btn').click(); // Switch to extractor tab
+      switchTab('extractor');
       renderExtractionResult(anime);
     }
 
@@ -1843,14 +2465,36 @@
       video.pause();
       video.src = '';
 
-      // Route through local stripping proxy if animenani, 24playerhd/orbitalkthai, stream-aph, maimeorder or protected CDN
       let playableUrl = streamUrl;
       const lower = streamUrl.toLowerCase();
-      if (lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('orbitalkthai') || lower.includes('stream-aph') || lower.includes('qqhls') || lower.includes('flower.txt') || lower.includes('/o/') || lower.includes('maimeorder') || lower.includes('animemami') || lower.endsWith('.txt')) {
+
+      // Check built-in proxy sites
+      let needsProxy = lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('orbitalkthai') || lower.includes('stream-aph') || lower.includes('qqhls') || lower.includes('flower.txt') || lower.includes('/o/') || lower.includes('maimeorder') || lower.includes('animemami') || lower.endsWith('.txt');
+
+      // Check dynamic proxy rules from custom_sites
+      if (!needsProxy && customSitesData && customSitesData.length > 0) {
+        for (const cs of customSitesData) {
+          if (cs.requires_proxy !== false) {
+            if (cs.stream_domains && cs.stream_domains.length > 0) {
+              if (cs.stream_domains.some(d => lower.includes(d.toLowerCase()))) {
+                needsProxy = true;
+                break;
+              }
+            } else if (cs.domains && cs.domains.length > 0) {
+              if (cs.domains.some(d => lower.includes(d.toLowerCase()))) {
+                needsProxy = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (needsProxy) {
         playableUrl = `/api/proxy/hls/manifest?url=${encodeURIComponent(streamUrl)}`;
       }
 
-      const isHls = playableUrl.includes('.m3u8') || playableUrl.includes('/proxy/hls/manifest') || playableUrl.includes('flower.txt') || lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('stream-aph') || lower.includes('maimeorder') || lower.includes('animemami') || lower.endsWith('.txt');
+      const isHls = needsProxy || playableUrl.includes('.m3u8') || playableUrl.includes('/proxy/hls/manifest') || playableUrl.includes('flower.txt') || lower.endsWith('.txt');
 
       if (isHls && window.Hls && Hls.isSupported()) {
         const hls = new Hls({
@@ -1892,10 +2536,515 @@
       modal.classList.remove('open');
     }
 
+    // --- Database Export & Import ---
+    function exportDatabase() {
+      window.location.href = '/api/database/export';
+      showToast('กำลังดาวน์โหลดไฟล์สำรองฐานข้อมูล...');
+    }
+
+    let selectedDbFile = null;
+
+    function openImportDatabaseModal() {
+      const modal = document.getElementById('importDbModal');
+      document.getElementById('dbFileInput').value = '';
+      document.getElementById('importDbProgress').style.display = 'none';
+      document.getElementById('importDbResult').style.display = 'none';
+      document.getElementById('startImportDbBtn').disabled = true;
+      selectedDbFile = null;
+      modal.classList.add('open');
+    }
+
+    function closeImportDatabaseModal() {
+      document.getElementById('importDbModal').classList.remove('open');
+    }
+
+    function onDbFileSelected(event) {
+      const file = event.target.files[0];
+      if (file) {
+        selectedDbFile = file;
+        document.getElementById('startImportDbBtn').disabled = false;
+      }
+    }
+
+    async function submitImportDatabase() {
+      if (!selectedDbFile) return;
+
+      const progress = document.getElementById('importDbProgress');
+      const resultBox = document.getElementById('importDbResult');
+      const startBtn = document.getElementById('startImportDbBtn');
+
+      progress.style.display = 'block';
+      resultBox.style.display = 'none';
+      startBtn.disabled = true;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedDbFile);
+
+        const res = await fetch('/api/database/import', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText);
+        }
+
+        const data = await res.json();
+        progress.style.display = 'none';
+        resultBox.style.display = 'block';
+
+        let detailsHtml = '';
+        if (data.details && data.details.length > 0) {
+          detailsHtml = `<div style="margin-top: 10px; max-height: 140px; overflow-y: auto; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px; font-size: 0.82rem; font-family: monospace;">` +
+            data.details.map(d => {
+              if (d.action === 'inserted') {
+                return `<div style="color: #4ade80;">+ [เรื่องใหม่] ${d.title} (${d.episodes} ตอน)</div>`;
+              } else {
+                return `<div style="color: #38bdf8;">↻ [อัปเดตตอน] ${d.title}: เพิ่ม ${d.new_episodes_added || 0} ตอนใหม่, ปรับสตรีม ${d.streams_updated || 0} ตอน (รวม ${d.total_episodes} ตอน)</div>`;
+              }
+            }).join('') + `</div>`;
+        }
+
+        resultBox.innerHTML = `
+          <div style="font-weight: 600; color: #4ade80; margin-bottom: 6px;">🎉 นำเข้าและผสานฐานข้อมูลสำเร็จ!</div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; font-size: 0.85rem;">
+            <div>📥 เรื่องทั้งหมดในไฟล์: <strong>${data.total_in_file}</strong> เรื่อง</div>
+            <div>🆕 เพิ่มเรื่องใหม่: <strong style="color: #4ade80;">${data.inserted_new}</strong> เรื่อง</div>
+            <div>🔄 อัปเดต/รวมตอน: <strong style="color: #38bdf8;">${data.updated_existing}</strong> เรื่อง</div>
+            <div>⏭️ ไม่เปลี่ยนแปลง: <strong>${data.unmodified}</strong> เรื่อง</div>
+          </div>
+          <div style="margin-top: 8px; font-size: 0.9rem; font-weight: 600; color: #f1f5f9;">
+            📚 รวมอนิเมะทั้งหมดในเว็บนี้ขณะนี้: <strong>${data.total_db_count || data.total_in_db}</strong> เรื่อง (ไม่ลบเรื่องอื่น)
+          </div>
+          ${detailsHtml}
+        `;
+
+        showToast(`นำเข้าสำเร็จ! เพิ่ม ${data.inserted_new} เรื่อง, อัปเดต ${data.updated_existing} เรื่อง`);
+        loadCatalog();
+      } catch (e) {
+        progress.style.display = 'none';
+        resultBox.style.display = 'block';
+        resultBox.style.background = 'rgba(255, 23, 68, 0.1)';
+        resultBox.style.borderColor = 'var(--danger)';
+        resultBox.innerHTML = `<div style="color: #ff5252; font-weight: 600;">❌ เกิดข้อผิดพลาดในการนำเข้า:</div><div style="font-size: 0.82rem; margin-top: 4px; color: #fca5a5;">${e.message}</div>`;
+        showToast('เกิดข้อผิดพลาดในการนำเข้า: ' + e.message, 'error');
+        startBtn.disabled = false;
+      }
+    }
+
+    // --- Custom Sites Management & AI Rule Generator ---
+    let customSitesData = [];
+    let currentRuleEditing = null;
+
+    async function loadCustomSites() {
+      try {
+        const res = await fetch('/api/custom_sites');
+        customSitesData = await res.json();
+        renderCustomSitesList();
+        document.getElementById('rawCustomSitesJson').value = JSON.stringify(customSitesData, null, 2);
+      } catch (e) {
+        console.error('Failed to load custom sites:', e);
+      }
+    }
+
+    function renderCustomSitesList() {
+      const container = document.getElementById('customSitesList');
+      const countEl = document.getElementById('customSitesCount');
+      if (countEl) countEl.textContent = customSitesData.length;
+      if (!container) return;
+
+      if (!customSitesData || customSitesData.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 24px;">ยังไม่มีเว็บไซต์ใน custom_sites.json กดเพิ่มกฎใหม่หรือให้ AI สร้างอัตโนมัติด้านบน</div>';
+        return;
+      }
+
+      container.innerHTML = customSitesData.map((rule, idx) => {
+        const domains = (rule.domains || []).map(d => `<span style="background: rgba(5, 217, 232, 0.15); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-family: monospace;">${d}</span>`).join(' ');
+        const proxyBadge = rule.requires_proxy !== false
+          ? `<span style="background: rgba(255, 0, 127, 0.15); color: #ff007f; border: 1px solid rgba(255, 0, 127, 0.35); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">🛡️ Proxy Active</span>`
+          : `<span style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">Direct</span>`;
+        return `
+          <div style="background: rgba(17, 21, 34, 0.6); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="flex: 1; min-width: 250px;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
+                <strong style="font-size: 1.05rem; color: #fff;">${rule.name || 'ไม่ระบุชื่อ'}</strong>
+                <div>${domains}</div>
+                <div>${proxyBadge}</div>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 12px;">
+                <span>Title: <code style="color: #cbd5e1;">${rule.title_selector || '-'}</code></span>
+                <span>Episodes: <code style="color: #cbd5e1;">${rule.episodes_selector || '-'}</code></span>
+                <span>Stream Regex: <code style="color: #cbd5e1;">${(rule.stream_regex || '').slice(0, 30)}...</code></span>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.85rem;" onclick="testRuleFromList(${idx})">
+                🧪 ทดสอบ
+              </button>
+              <button class="btn btn-outline" style="padding: 6px 12px; font-size: 0.85rem;" onclick="editRuleFromList(${idx})">
+                ✏️ แก้ไข
+              </button>
+              <button class="btn btn-danger" style="padding: 6px 12px; font-size: 0.85rem;" onclick="deleteRuleFromList(${idx})">
+                ลบ
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleProxyFields() {
+      const chk = document.getElementById('ruleRequiresProxy');
+      const container = document.getElementById('proxyFieldsContainer');
+      if (container && chk) {
+        container.style.display = chk.checked ? 'grid' : 'none';
+      }
+    }
+
+    function downloadCustomSites() {
+      window.location.href = '/api/custom_sites/download';
+      showToast('กำลังดาวน์โหลด custom_sites.json...');
+    }
+
+    async function uploadCustomSitesFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/custom_sites/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        const result = await res.json();
+        showToast(`อัปโหลดสำเร็จ! มี ${result.count} กฎในระบบ`);
+        loadCustomSites();
+      } catch (e) {
+        showToast('อัปโหลดล้มเหลว: ' + e.message, 'error');
+      } finally {
+        event.target.value = '';
+      }
+    }
+
+    function resetRuleForm() {
+      currentRuleEditing = null;
+      document.getElementById('ruleFormHeaderTitle').textContent = '✏️ เพิ่มกฎเว็บไซต์ใหม่ (New Rule)';
+      document.getElementById('ruleName').value = '';
+      document.getElementById('ruleDomains').value = '';
+      document.getElementById('ruleTitleSelector').value = 'h1.entry-title, h1.post-title, h1';
+      document.getElementById('ruleTitleCleanRegex').value = '\\s*ตอนที่\\s*\\d+.*$';
+      document.getElementById('ruleCoverSelector').value = '.poster img, .entry-thumbnail img, .post-content-img img';
+      document.getElementById('ruleSynopsisSelector').value = '.entry-content p, .synopsis, .content-des p';
+      document.getElementById('ruleEpisodesSelector').value = '.episode-list a, .eplink a, .eplister ul li a';
+      document.getElementById('ruleEpNumRegex').value = '(?:ตอนที่|ep(?:isode)?)[-_.\\s]*(\\d+(?:\\.\\d+)?)';
+      document.getElementById('ruleStreamRegex').value = 'https?://[^\\s"\'<>]+(?:\\.m3u8|\\.mp4)[^\\s"\'<>]*';
+      document.getElementById('rulePlayerAjax').value = '';
+      document.getElementById('ruleRequiresProxy').checked = true;
+      document.getElementById('ruleProxyReferer').value = '';
+      document.getElementById('ruleProxyOrigin').value = '';
+      document.getElementById('ruleStreamDomains').value = '';
+      document.getElementById('ruleStripFakeHeaders').checked = false;
+      toggleProxyFields();
+      document.getElementById('ruleTestPreview').style.display = 'none';
+
+      document.getElementById('ruleFormContainer').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function getRuleFromForm() {
+      const domainsRaw = document.getElementById('ruleDomains').value;
+      const domains = domainsRaw.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+      const streamDomainsRaw = document.getElementById('ruleStreamDomains').value;
+      const streamDomains = streamDomainsRaw.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+
+      return {
+        name: document.getElementById('ruleName').value.trim() || 'Custom Anime Site',
+        domains: domains,
+        title_selector: document.getElementById('ruleTitleSelector').value.trim() || undefined,
+        title_clean_regex: document.getElementById('ruleTitleCleanRegex').value.trim() || undefined,
+        cover_selector: document.getElementById('ruleCoverSelector').value.trim() || undefined,
+        synopsis_selector: document.getElementById('ruleSynopsisSelector').value.trim() || undefined,
+        episodes_selector: document.getElementById('ruleEpisodesSelector').value.trim() || undefined,
+        episode_number_regex: document.getElementById('ruleEpNumRegex').value.trim() || undefined,
+        stream_regex: document.getElementById('ruleStreamRegex').value.trim() || undefined,
+        player_ajax_regex: document.getElementById('rulePlayerAjax').value.trim() || undefined,
+        requires_proxy: document.getElementById('ruleRequiresProxy').checked,
+        proxy_referer: document.getElementById('ruleProxyReferer').value.trim() || undefined,
+        proxy_origin: document.getElementById('ruleProxyOrigin').value.trim() || undefined,
+        stream_domains: streamDomains.length > 0 ? streamDomains : undefined,
+        strip_fake_headers: document.getElementById('ruleStripFakeHeaders').checked
+      };
+    }
+
+    function setFormFromRule(rule) {
+      document.getElementById('ruleName').value = rule.name || '';
+      document.getElementById('ruleDomains').value = (rule.domains || []).join(', ');
+      document.getElementById('ruleTitleSelector').value = rule.title_selector || '';
+      document.getElementById('ruleTitleCleanRegex').value = rule.title_clean_regex || '\\s*ตอนที่\\s*\\d+.*$';
+      document.getElementById('ruleCoverSelector').value = rule.cover_selector || '';
+      document.getElementById('ruleSynopsisSelector').value = rule.synopsis_selector || '';
+      document.getElementById('ruleEpisodesSelector').value = rule.episodes_selector || '';
+      document.getElementById('ruleEpNumRegex').value = rule.episode_number_regex || '(?:ตอนที่|ep(?:isode)?)[-_.\\s]*(\\d+(?:\\.\\d+)?)';
+      document.getElementById('ruleStreamRegex').value = rule.stream_regex || 'https?://[^\\s"\'<>]+(?:\\.m3u8|\\.mp4)[^\\s"\'<>]*';
+      document.getElementById('rulePlayerAjax').value = rule.player_ajax_regex || '';
+      document.getElementById('ruleRequiresProxy').checked = rule.requires_proxy !== false;
+      document.getElementById('ruleProxyReferer').value = rule.proxy_referer || '';
+      document.getElementById('ruleProxyOrigin').value = rule.proxy_origin || '';
+      document.getElementById('ruleStreamDomains').value = (rule.stream_domains || []).join(', ');
+      document.getElementById('ruleStripFakeHeaders').checked = !!rule.strip_fake_headers;
+      toggleProxyFields();
+    }
+
+    function renderTestPreview(testResult) {
+      const preview = document.getElementById('ruleTestPreview');
+      if (!preview) return;
+
+      preview.style.display = 'block';
+      const badge = document.getElementById('ruleTestBadge');
+      badge.textContent = `ตรวจพบ ${testResult.episode_count || 0} ตอน`;
+      badge.className = (testResult.episode_count > 0) ? 'badge badge-success' : 'badge badge-warning';
+
+      document.getElementById('ruleTestTitle').textContent = testResult.title || 'ไม่พบชื่อเรื่อง';
+      document.getElementById('ruleTestSynopsis').textContent = testResult.synopsis || 'ไม่พบเรื่องย่อ';
+      document.getElementById('ruleTestEpCountText').textContent = `จำนวนตอนที่ดึงได้: ${testResult.episode_count || 0} ตอน`;
+
+      const coverImg = document.getElementById('ruleTestCoverImg');
+      const noCover = document.getElementById('ruleTestNoCover');
+      if (testResult.cover_url) {
+        coverImg.src = testResult.cover_url;
+        coverImg.style.display = 'block';
+        noCover.style.display = 'none';
+      } else {
+        coverImg.style.display = 'none';
+        noCover.style.display = 'block';
+      }
+
+      const epListEl = document.getElementById('ruleTestEpList');
+      const samples = testResult.sample_episodes || [];
+      if (samples.length === 0) {
+        epListEl.innerHTML = '<span style="color: var(--danger);">ไม่พบรายการตอน กรุณาตรวจสอบ episodes_selector และ episode_number_regex</span>';
+      } else {
+        epListEl.innerHTML = samples.map(ep => `
+          <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <span>ตอนที่ ${ep.episode_number}: <strong>${ep.title}</strong></span>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">${(ep.page_url || '').slice(0, 45)}...</span>
+          </div>
+        `).join('') + (testResult.episode_count > samples.length ? `<div style="color: var(--text-muted); font-style: italic; margin-top: 4px;">... และอีก ${testResult.episode_count - samples.length} ตอน</div>` : '');
+      }
+
+      preview.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function generateRuleWithAI() {
+      const url = document.getElementById('aiSiteUrl').value.trim();
+      const hint = document.getElementById('aiSiteHint').value.trim();
+      if (!url || !url.startsWith('http')) {
+        showToast('กรุณาระบุ URL ของหน้าอนิเมะให้ถูกต้อง', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('btnGenerateAiRule');
+      const spinner = document.getElementById('aiRuleSpinner');
+      const progressBox = document.getElementById('aiRuleProgressBox');
+      const progressTitle = document.getElementById('aiRuleProgressTitle');
+      const logs = document.getElementById('aiRuleLogs');
+
+      btn.disabled = true;
+      spinner.style.display = 'inline-block';
+      progressBox.style.display = 'block';
+      progressTitle.textContent = 'กำลังติดต่อเซิร์ฟเวอร์และดาวน์โหลดหน้าเว็บ...';
+      logs.textContent = '';
+
+      try {
+        const response = await fetch('/api/custom_sites/generate_stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url, hint: hint })
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'log') {
+                  logs.textContent += `${data.message}\n`;
+                  progressTitle.textContent = data.message;
+                  logs.scrollTop = logs.scrollHeight;
+                } else if (data.type === 'thinking') {
+                  logs.textContent += data.chunk;
+                  logs.scrollTop = logs.scrollHeight;
+                } else if (data.type === 'done') {
+                  finalResult = data.result;
+                } else if (data.type === 'error') {
+                  throw new Error(data.message);
+                }
+              } catch (e) {
+                console.error(e);
+              }
+            }
+          }
+        }
+
+        if (finalResult && finalResult.rule) {
+          showToast('🤖 AI สร้างกฎเว็บไซต์สำเร็จแล้ว!');
+          setFormFromRule(finalResult.rule);
+          if (finalResult.test_result) {
+            renderTestPreview(finalResult.test_result);
+          }
+        }
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการสร้างกฎ: ' + e.message, 'error');
+        logs.textContent += `\n❌ เกิดข้อผิดพลาด: ${e.message}\n`;
+      } finally {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+      }
+    }
+
+    async function testCurrentRule() {
+      const url = document.getElementById('aiSiteUrl').value.trim();
+      if (!url || !url.startsWith('http')) {
+        showToast('กรุณาระบุ URL ของหน้าอนิเมะในช่องด้านบนเพื่อใช้ทดสอบ', 'error');
+        return;
+      }
+
+      const rule = getRuleFromForm();
+      showToast('กำลังทดสอบกฎกับหน้าเว็บจริง...');
+
+      try {
+        const res = await fetch('/api/custom_sites/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule: rule, url: url })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        const testResult = await res.json();
+        renderTestPreview(testResult);
+        showToast(`ทดสอบเสร็จสิ้น: ${testResult.message}`);
+      } catch (e) {
+        showToast('ทดสอบไม่สำเร็จ: ' + e.message, 'error');
+      }
+    }
+
+    async function saveCurrentRule() {
+      const rule = getRuleFromForm();
+      if (!rule.domains || rule.domains.length === 0) {
+        showToast('กรุณาระบุโดเมนที่รองรับอย่างน้อย 1 โดเมน', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/custom_sites/save_rule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule: rule })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        showToast(`บันทึกกฎ "${rule.name}" เข้า custom_sites.json สำเร็จ!`);
+        loadCustomSites();
+      } catch (e) {
+        showToast('เกิดข้อผิดพลาดในการบันทึก: ' + e.message, 'error');
+      }
+    }
+
+    function editRuleFromList(idx) {
+      const rule = customSitesData[idx];
+      if (!rule) return;
+      currentRuleEditing = rule;
+      document.getElementById('ruleFormHeaderTitle').textContent = `✏️ แก้ไขกฎ: ${rule.name}`;
+      setFormFromRule(rule);
+      document.getElementById('ruleFormContainer').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    async function testRuleFromList(idx) {
+      const rule = customSitesData[idx];
+      if (!rule) return;
+      const domain = (rule.domains && rule.domains[0]) || '';
+      const sampleUrl = prompt(`ใส่ URL ของหน้าอนิเมะในเว็บ ${domain} เพื่อทดสอบกฎ:`, domain ? `https://${domain}/` : '');
+      if (!sampleUrl || !sampleUrl.startsWith('http')) return;
+
+      document.getElementById('aiSiteUrl').value = sampleUrl;
+      setFormFromRule(rule);
+
+      showToast('กำลังทดสอบกฎ...');
+      try {
+        const res = await fetch('/api/custom_sites/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule: rule, url: sampleUrl })
+        });
+        const result = await res.json();
+        renderTestPreview(result);
+      } catch (e) {
+        showToast('ทดสอบล้มเหลว: ' + e.message, 'error');
+      }
+    }
+
+    async function deleteRuleFromList(idx) {
+      const rule = customSitesData[idx];
+      if (!rule) return;
+      const targetIdent = (rule.domains && rule.domains[0]) || rule.name;
+      if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบกฎ "${rule.name}" (${targetIdent})?`)) return;
+
+      try {
+        const res = await fetch(`/api/custom_sites/${encodeURIComponent(targetIdent)}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) throw new Error(await res.text());
+        showToast(`ลบกฎ "${rule.name}" เรียบร้อยแล้ว`);
+        loadCustomSites();
+      } catch (e) {
+        showToast('ลบล้มเหลว: ' + e.message, 'error');
+      }
+    }
+
+    async function saveRawCustomSitesJson() {
+      const text = document.getElementById('rawCustomSitesJson').value;
+      try {
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed)) throw new Error('ข้อมูลต้องเป็น JSON Array [ ... ]');
+
+        const res = await fetch('/api/custom_sites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed)
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        showToast('บันทึก custom_sites.json สำเร็จ!');
+        loadCustomSites();
+      } catch (e) {
+        showToast('บันทึกไม่สำเร็จ (ตรวจสอบ JSON): ' + e.message, 'error');
+      }
+    }
+
     // Init on page load
     window.addEventListener('DOMContentLoaded', () => {
       loadServerInfo();
       loadCatalog();
+      loadCustomSites();
     });
   </script>
 </body>

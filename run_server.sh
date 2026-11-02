@@ -4,7 +4,7 @@ cd "$(dirname "$0")/server"
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
     uv venv
-    uv pip install fastapi uvicorn httpx beautifulsoup4 pydantic
+    uv pip install fastapi uvicorn httpx beautifulsoup4 pydantic python-multipart
 fi
 
 echo "Starting Anime Studio Server on http://0.0.0.0:8800..."

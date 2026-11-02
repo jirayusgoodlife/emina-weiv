@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/download_item.dart';
 import '../models/isar_models.dart';
+import '../services/in_app_stream_proxy.dart';
 
 class DownloadedAnimeGroup {
   final String animeSlug;
@@ -65,64 +66,7 @@ class DownloadProvider extends ChangeNotifier {
   static const String _prefDownloadsKey = 'pref_downloaded_episodes_v1';
 
   static Map<String, String> _getCustomHeaders(String url) {
-    final lower = url.toLowerCase();
-    if (lower.contains('stream-aph') || lower.contains('qqhls') || lower.contains('qqstream')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://qqstream.stream-aph.xyz/',
-        'Origin': 'https://qqstream.stream-aph.xyz',
-        'Accept': '*/*',
-      };
-    }
-    if (lower.contains('animenani')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://nya.animenani.com/',
-        'Origin': 'https://nya.animenani.com',
-        'Accept': '*/*',
-      };
-    }
-    if (lower.contains('24playerhd') || lower.contains('orbitalkthai')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://main.24playerhd.com/',
-        'Origin': 'https://main.24playerhd.com',
-        'Accept': '*/*',
-      };
-    }
-    if (lower.contains('anifume') || lower.contains('rukoluo')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://anifume.com/',
-        'Accept': '*/*',
-      };
-    }
-    if (lower.contains('fairyanime') || lower.contains('tonytonychopper')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://anime.tonytonychopper.net/',
-        'Accept': '*/*',
-      };
-    }
-    if (lower.contains('maimeorder') || lower.contains('animemami')) {
-      return {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Referer': 'https://animemami.xyz/',
-        'Origin': 'https://animemami.xyz',
-        'Accept': '*/*',
-      };
-    }
-    return {
-      'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': '*/*',
-    };
+    return InAppStreamProxy.getCustomHeaders(url);
   }
 
   DownloadProvider({required SharedPreferences prefs}) : _prefs = prefs {

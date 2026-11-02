@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:isar_community/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/isar_models.dart';
+import 'in_app_stream_proxy.dart';
 
 class SyncResult {
   final bool success;
@@ -136,6 +137,11 @@ class IsarService {
 
       final jsonMap = json.decode(utf8.decode(response.bodyBytes));
       final List<dynamic> data = jsonMap['data'] ?? [];
+
+      // Update dynamic stream proxy rules from server
+      if (jsonMap['proxy_rules'] is List) {
+        InAppStreamProxy.instance.updateProxyRules(jsonMap['proxy_rules'] as List<dynamic>);
+      }
 
       int syncedCount = 0;
 

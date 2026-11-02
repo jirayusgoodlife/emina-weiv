@@ -10,8 +10,18 @@ from typing import List, Optional, Dict, Any
 import httpx
 import os
 
-from db import init_db, get_all_anime, get_anime_by_slug, save_anime, delete_anime, get_settings, save_settings
+from db import init_db, get_all_anime, get_anime_by_slug, save_anime, delete_anime, get_settings, save_settings, export_database, import_database
 from extractor import extract_anime, resolve_direct_stream
+from rule_generator import (
+    load_custom_sites,
+    save_custom_sites,
+    add_or_update_custom_site,
+    delete_custom_site,
+    generate_site_rule_with_llm,
+    test_site_rule,
+    build_proxy_rules_for_sync,
+    CONFIG_PATH as CUSTOM_SITES_PATH
+)
 
 # Initialize SQLite database
 init_db()
@@ -58,6 +68,10 @@ class ExtractRequest(BaseModel):
     url: str
     use_ai: bool = True
 
+class UpdateEpisodesRequest(BaseModel):
+    source_url: Optional[str] = None
+    use_ai: bool = False
+
 class StreamResolveRequest(BaseModel):
     page_url: str
 
@@ -67,6 +81,17 @@ class SettingsRequest(BaseModel):
     lmstudio_model: Optional[str] = "local-model"
     ollama_url: Optional[str] = "http://localhost:11434"
     ollama_model: Optional[str] = "llama3.2"
+
+class GenerateRuleRequest(BaseModel):
+    url: str
+    hint: Optional[str] = None
+
+class TestRuleRequest(BaseModel):
+    rule: Dict[str, Any]
+    url: str
+
+class SaveRuleRequest(BaseModel):
+    rule: Dict[str, Any]
 
 @app.get("/api/info")
 def get_info(request: Request):
@@ -238,46 +263,259 @@ def api_delete_anime(slug: str):
     success = delete_anime(slug)
     return {"status": "ok", "deleted": success}
 
+@app.post("/api/anime/{slug}/update_episodes")
+async def api_update_episodes(slug: str, req: Optional[UpdateEpisodesRequest] = None):
+    """
+    Re-fetches and smart merges newest episodes from anime source_url.
+    Preserves existing episodes and stream URLs while appending newly aired episodes.
+    """
+    existing = get_anime_by_slug(slug)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Anime '{slug}' not found")
+
+    source_url = (req and req.source_url) or existing.get("source_url")
+    if not source_url:
+        raise HTTPException(status_code=400, detail="Anime does not have a source_url stored. Please specify source_url.")
+
+    settings = get_settings()
+    use_ai = req.use_ai if req else False
+
+    try:
+        fresh_data = await extract_anime(source_url, settings, use_ai=use_ai)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes from {source_url}: {str(e)}")
+
+    target_data = fresh_data
+    if fresh_data.get("split_collections"):
+        matched = next((col for col in fresh_data["split_collections"] if col.get("slug") == slug), None)
+        if not matched:
+            if "-sub" in slug:
+                matched = next((col for col in fresh_data["split_collections"] if "sub" in col.get("slug", "").lower()), None)
+            elif "-dub" in slug:
+                matched = next((col for col in fresh_data["split_collections"] if "dub" in col.get("slug", "").lower()), None)
+        target_data = matched or fresh_data["split_collections"][0]
+
+    target_data = dict(target_data)
+    target_data["slug"] = slug
+    target_data["source_url"] = source_url
+
+    prev_count = len(existing.get("episodes", []))
+    saved = save_anime(target_data)
+    curr_count = len(saved.get("episodes", []))
+    new_added = max(0, curr_count - prev_count)
+
+    return {
+        "status": "ok",
+        "slug": slug,
+        "title": saved.get("title", existing.get("title")),
+        "source_url": source_url,
+        "previous_count": prev_count,
+        "current_count": curr_count,
+        "new_episodes_added": new_added,
+        "anime": saved
+    }
+
 @app.get("/api/sync")
 def api_sync():
-    """Returns catalog payload tailored for Flutter Isar sync."""
+    """Returns catalog payload tailored for Flutter Isar sync with dynamic proxy rules."""
     animes = get_all_anime()
+    custom_sites = load_custom_sites()
+    proxy_rules = build_proxy_rules_for_sync(custom_sites)
     return {
-        "version": "1.0",
+        "version": "1.1",
         "timestamp": os.times()[4],
         "count": len(animes),
-        "data": animes
+        "data": animes,
+        "custom_sites": custom_sites,
+        "proxy_rules": proxy_rules
     }
+
+# --- Database Export & Import ---
+@app.get("/api/database/export")
+def api_export_database():
+    """Export full anime and episode database to JSON file."""
+    import datetime
+    now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    data = export_database()
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"anime_database_backup_{now_str}.json\""
+        }
+    )
+
+@app.post("/api/database/import")
+async def api_import_database(request: Request):
+    """
+    Import full database from JSON payload or file upload.
+    - Does NOT delete existing anime in target database.
+    - Merges episodes if existing anime has different episode count or new episodes.
+    """
+    content_type = request.headers.get("content-type", "")
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if not upload or not hasattr(upload, "read"):
+                raise HTTPException(status_code=400, detail="No file found in multipart form data")
+            content = await upload.read()
+            payload = json.loads(content.decode("utf-8"))
+        else:
+            payload = await request.json()
+
+        if not payload:
+            raise HTTPException(status_code=400, detail="Empty database payload")
+
+        result = import_database(payload)
+        return result
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file or payload")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Custom Sites Management & AI Rule Generation ---
+@app.get("/api/custom_sites")
+def api_get_custom_sites():
+    """Returns list of custom site rules."""
+    return load_custom_sites()
+
+@app.get("/api/custom_sites/download")
+def api_download_custom_sites():
+    """Downloads current custom_sites.json file."""
+    sites = load_custom_sites()
+    content = json.dumps(sites, ensure_ascii=False, indent=2)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": "attachment; filename=\"custom_sites.json\""
+        }
+    )
+
+@app.post("/api/custom_sites/upload")
+async def api_upload_custom_sites(request: Request):
+    """Upload new custom_sites.json file or JSON list."""
+    content_type = request.headers.get("content-type", "")
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            upload = form.get("file")
+            if not upload or not hasattr(upload, "read"):
+                raise HTTPException(status_code=400, detail="No file found in form data")
+            content = await upload.read()
+            parsed = json.loads(content.decode("utf-8"))
+        else:
+            parsed = await request.json()
+
+        if isinstance(parsed, dict) and "sites" in parsed:
+            parsed = parsed["sites"]
+        if not isinstance(parsed, list):
+            raise HTTPException(status_code=400, detail="custom_sites must be a JSON array of site rules")
+
+        save_custom_sites(parsed)
+        return {"status": "ok", "count": len(parsed), "sites": parsed}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Uploaded file is not valid JSON")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/custom_sites")
+def api_save_custom_sites_list(rules: Any):
+    """Save the full list of custom site rules directly."""
+    if isinstance(rules, dict) and "sites" in rules:
+        rules = rules["sites"]
+    if not isinstance(rules, list):
+        raise HTTPException(status_code=400, detail="Expected list of rules")
+    save_custom_sites(rules)
+    return {"status": "ok", "sites": rules}
+
+@app.post("/api/custom_sites/save_rule")
+def api_save_single_rule(req: SaveRuleRequest):
+    """Add or update a single custom site rule."""
+    updated = add_or_update_custom_site(req.rule)
+    return {"status": "ok", "sites": updated}
+
+@app.delete("/api/custom_sites/{identifier}")
+def api_delete_custom_site(identifier: str):
+    """Delete a custom site rule by domain or name."""
+    updated = delete_custom_site(identifier)
+    return {"status": "ok", "sites": updated}
+
+@app.post("/api/custom_sites/generate")
+async def api_generate_rule(req: GenerateRuleRequest):
+    """Use Local AI LLM to analyze webpage and generate site rule JSON."""
+    if not req.url or not req.url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    settings = get_settings()
+    try:
+        res = await generate_site_rule_with_llm(req.url, settings, hint=req.hint)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/custom_sites/generate_stream")
+async def api_generate_rule_stream(req: GenerateRuleRequest):
+    """Stream Local AI LLM generation events (logs, thinking, and final rule)."""
+    if not req.url or not req.url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    settings = get_settings()
+
+    async def event_generator():
+        queue = asyncio.Queue()
+
+        async def on_event(ev: Dict[str, Any]):
+            await queue.put(ev)
+
+        async def worker():
+            try:
+                res = await generate_site_rule_with_llm(req.url, settings, hint=req.hint, on_event=on_event)
+                await queue.put({"type": "done", "result": res})
+            except Exception as e:
+                await queue.put({"type": "error", "message": str(e)})
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(worker())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+
+        await task
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.post("/api/custom_sites/test")
+def api_test_custom_rule(req: TestRuleRequest):
+    """Test a site rule against a target URL."""
+    if not req.url or not req.url.startswith("http"):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    res = test_site_rule(req.rule, req.url)
+    return res
+
+@app.get("/api/proxy/rules")
+def api_get_proxy_rules():
+    """Returns dynamic proxy rules for anti-hotlinking."""
+    return build_proxy_rules_for_sync()
 
 def get_stream_proxy_headers(target_url: str) -> Dict[str, str]:
     target_lower = target_url.lower()
-    if "stream-aph" in target_lower or "qqhls" in target_lower or "qqstream" in target_lower:
-        return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://qqstream.stream-aph.xyz/",
-            "Origin": "https://qqstream.stream-aph.xyz",
-            "Accept": "*/*",
-        }
-    if "animenani" in target_lower:
-        return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://nya.animenani.com/",
-            "Origin": "https://nya.animenani.com",
-            "Accept": "*/*",
-        }
-    if "maimeorder" in target_lower or "animemami" in target_lower:
-        return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://animemami.xyz/",
-            "Origin": "https://animemami.xyz",
-            "Accept": "*/*",
-        }
-    if "fairyanime" in target_lower or "tonytonychopper" in target_lower:
-        return {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://anime.tonytonychopper.net/",
-            "Accept": "*/*",
-        }
+    rules = build_proxy_rules_for_sync()
+
+    # Prioritize custom rules (reverse order)
+    for rule in reversed(rules):
+        for domain in rule.get("match_domains", []):
+            if domain and domain in target_lower:
+                return rule.get("headers", {})
+
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Referer": "https://main.24playerhd.com/",
@@ -360,6 +598,14 @@ async def proxy_hls_segment(url: str):
                     break
 
         return Response(content=data, media_type="video/MP2T")
+
+@app.get("/robots.txt")
+def get_robots():
+    robots_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "robots.txt")
+    if os.path.exists(robots_path):
+        with open(robots_path, "r", encoding="utf-8") as f:
+            return Response(content=f.read(), media_type="text/plain")
+    return Response(content="User-agent: *\nDisallow: /\n", media_type="text/plain")
 
 # Serve the HTML frontend
 @app.get("/", response_class=HTMLResponse)
