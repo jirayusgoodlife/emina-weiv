@@ -1,15 +1,22 @@
 [
   {
-    "name": "Custom Anime Template (ตัวอย่างสำหรับเพิ่มเว็บใหม่)",
+    "name": "Wow-drama (Auto)",
     "domains": [
-      "custom-example.com"
+      "wow-drama.com"
     ],
-    "title_selector": "h1.entry-title, h1.post-title",
+    "title_selector": "h1.entry-title, h1.post-title, h1",
     "title_clean_regex": "\\s*ตอนที่\\s*\\d+.*$",
     "cover_selector": ".post-content-img img, .poster img, .entry-thumbnail img",
     "synopsis_selector": ".content-des p, .entry-content p, .synopsis",
-    "episodes_selector": ".eplink a, .episode-list a",
+    "episodes_selector": ".eplink a, .episode-list a, .eplister ul li a",
     "episode_number_regex": "(?:ตอนที่|ep(?:isode)?)[-_.\\s]*(\\d+(?:\\.\\d+)?)",
-    "stream_regex": "https?://[^\\s\"'<>]+(?:\\.m3u8|\\.mp4)[^\\s\"'<>]*"
+    "stream_regex": "https?://[^\\s\\\"'<>]+(?:\\.m3u8|\\.mp4)[^\\s\\\"'<>]*",
+    "requires_proxy": true,
+    "proxy_referer": "https://wow-drama.com/",
+    "proxy_origin": "https://wow-drama.com",
+    "stream_domains": [
+      "wow-drama.com"
+    ],
+    "strip_fake_headers": false
   }
 ]

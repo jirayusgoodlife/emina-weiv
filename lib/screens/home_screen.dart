@@ -17,6 +17,7 @@ import '../widgets/anime_action_sheet.dart';
 import '../widgets/settings_sheet.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
+import '../widgets/cast_button.dart';
 import '../theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -162,6 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: const Icon(Icons.play_arrow, size: 20, color: Colors.white),
         ),
         actions: [
+          const CastButton(),
           IconButton(
             icon: const Icon(Icons.search, color: AppTheme.textMain),
             tooltip: 'ค้นหา',

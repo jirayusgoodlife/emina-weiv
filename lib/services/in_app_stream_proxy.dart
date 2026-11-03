@@ -132,11 +132,11 @@ class InAppStreamProxy {
     if (_server != null) return;
 
     try {
-      // Bind to 127.0.0.1 on an available random port
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      // Bind to any IPv4 on an available random port (accessible locally and via LAN for Chromecast)
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
       _port = _server!.port;
       if (kDebugMode) {
-        print('[InAppProxy] Embedded stream proxy started on 127.0.0.1:$_port');
+        print('[InAppProxy] Embedded stream proxy started on 0.0.0.0:$_port');
       }
 
       _server!.listen(_handleRequest, onError: (e) {
@@ -153,6 +153,30 @@ class InAppStreamProxy {
     _port = null;
   }
 
+  /// Finds the local LAN IPv4 address of this device (Wi-Fi)
+  static Future<String?> getLanIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final interface in interfaces) {
+        for (final addr in interface.addresses) {
+          if (!addr.isLoopback &&
+              (addr.address.startsWith('192.168.') ||
+                  addr.address.startsWith('10.') ||
+                  addr.address.startsWith('172.'))) {
+            return addr.address;
+          }
+        }
+      }
+      if (interfaces.isNotEmpty && interfaces.first.addresses.isNotEmpty) {
+        return interfaces.first.addresses.first.address;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Converts a direct stream URL into an in-app proxy loopback URL
   String getProxyUrl(String targetUrl) {
     if (_port == null) return targetUrl;
@@ -160,9 +184,24 @@ class InAppStreamProxy {
     return 'http://127.0.0.1:$_port/manifest.m3u8?url=$encoded';
   }
 
+  /// Converts a stream URL into a LAN-accessible URL for Chromecast
+  Future<String> getLanCastUrl(String targetUrl) async {
+    if (_port == null) return targetUrl;
+    final ip = await getLanIp() ?? '127.0.0.1';
+    final encoded = Uri.encodeComponent(targetUrl);
+    return 'http://$ip:$_port/manifest.m3u8?url=$encoded';
+  }
+
+  /// Converts a local file path into a LAN-accessible streaming URL for Chromecast
+  Future<String> getLanFileCastUrl(String filePath) async {
+    if (_port == null) return filePath;
+    final ip = await getLanIp() ?? '127.0.0.1';
+    final encoded = Uri.encodeComponent(filePath);
+    return 'http://$ip:$_port/local_file?path=$encoded';
+  }
+
   Future<void> _handleRequest(HttpRequest request) async {
     final path = request.uri.path;
-    final targetUrl = request.uri.queryParameters['url'];
 
     // CORS headers
     request.response.headers.set('Access-Control-Allow-Origin', '*');
@@ -175,6 +214,27 @@ class InAppStreamProxy {
       return;
     }
 
+    // Handle offline file streaming for Chromecast
+    if (path == '/local_file') {
+      final filePath = request.uri.queryParameters['path'];
+      if (filePath == null || filePath.isEmpty) {
+        request.response.statusCode = HttpStatus.badRequest;
+        request.response.write('Missing file path');
+        await request.response.close();
+        return;
+      }
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        request.response.statusCode = HttpStatus.notFound;
+        request.response.write('File not found');
+        await request.response.close();
+        return;
+      }
+      await _serveLocalFile(request, file);
+      return;
+    }
+
+    final targetUrl = request.uri.queryParameters['url'];
     if (targetUrl == null || targetUrl.isEmpty) {
       request.response.statusCode = HttpStatus.badRequest;
       request.response.write('Missing target url');
@@ -193,6 +253,55 @@ class InAppStreamProxy {
       }
     } catch (e) {
       if (kDebugMode) print('[InAppProxy] Error handling $path: $e');
+      try {
+        request.response.statusCode = HttpStatus.internalServerError;
+        await request.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _serveLocalFile(HttpRequest request, File file) async {
+    try {
+      final length = await file.length();
+      final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+
+      request.response.headers.set('Accept-Ranges', 'bytes');
+      request.response.headers.contentType = ContentType('video', 'mp4');
+
+      if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+        final range = rangeHeader.substring(6).split('-');
+        final start = int.tryParse(range[0]) ?? 0;
+        final end = (range.length > 1 && range[1].isNotEmpty)
+            ? int.tryParse(range[1]) ?? (length - 1)
+            : length - 1;
+
+        final chunkSize = end - start + 1;
+        request.response.statusCode = HttpStatus.partialContent;
+        request.response.headers.set('Content-Range', 'bytes $start-$end/$length');
+        request.response.contentLength = chunkSize;
+
+        if (request.method == 'HEAD') {
+          await request.response.close();
+          return;
+        }
+
+        final stream = file.openRead(start, end + 1);
+        await request.response.addStream(stream);
+        await request.response.close();
+      } else {
+        request.response.statusCode = HttpStatus.ok;
+        request.response.contentLength = length;
+
+        if (request.method == 'HEAD') {
+          await request.response.close();
+          return;
+        }
+
+        await request.response.addStream(file.openRead());
+        await request.response.close();
+      }
+    } catch (e) {
+      if (kDebugMode) print('[InAppProxy] Error serving local file: $e');
       try {
         request.response.statusCode = HttpStatus.internalServerError;
         await request.response.close();
@@ -228,11 +337,12 @@ class InAppStreamProxy {
         } catch (_) {}
       }
 
-      // Rewrite manifest lines so ExoPlayer requests through In-App Proxy
+      // Rewrite manifest lines so ExoPlayer / Chromecast requests through In-App Proxy
       final lines = manifestBody.split('\n');
       final newLines = <String>[];
       final baseUri = Uri.parse(targetUrl);
-      final proxyBase = 'http://127.0.0.1:$_port';
+      final hostHeader = request.headers.value(HttpHeaders.hostHeader) ?? '127.0.0.1:$_port';
+      final proxyBase = 'http://$hostHeader';
 
       String lastTag = '';
       for (var line in lines) {

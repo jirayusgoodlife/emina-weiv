@@ -26,6 +26,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.animeview.anime_view/pip"
         private const val UPDATER_CHANNEL = "com.animeview.anime_view/updater"
+        private const val CAST_CHANNEL = "com.animeview.anime_view/cast"
         private const val ACTION_MEDIA_CONTROL = "com.animeview.anime_view.MEDIA_CONTROL"
         private const val EXTRA_CONTROL_TYPE = "control_type"
         private const val CONTROL_TYPE_PLAY = 1
@@ -33,6 +34,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private var methodChannel: MethodChannel? = null
+    private var castService: CastService? = null
     private var autoPipEnabled = false
     private var aspectRatioNumerator = 16
     private var aspectRatioDenominator = 9
@@ -263,6 +265,93 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        // Cast channel
+        castService = CastService(applicationContext)
+        val castChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CAST_CHANNEL)
+        castService?.methodChannel = castChannel
+        castChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startDiscovery" -> {
+                    castService?.startDiscovery()
+                    result.success(true)
+                }
+                "stopDiscovery" -> {
+                    castService?.stopDiscovery()
+                    result.success(true)
+                }
+                "getDevices" -> {
+                    val devices = castService?.getDiscoveredDevices() ?: emptyList<Map<String, Any>>()
+                    result.success(devices)
+                }
+                "connect" -> {
+                    val deviceId = call.argument<String>("deviceId") ?: ""
+                    castService?.connectToDevice(deviceId) { success, error ->
+                        if (success) {
+                            result.success(true)
+                        } else {
+                            result.error("CONNECT_ERROR", error ?: "Failed to connect", null)
+                        }
+                    }
+                }
+                "disconnect" -> {
+                    castService?.disconnect()
+                    result.success(true)
+                }
+                "loadMedia" -> {
+                    val url = call.argument<String>("url") ?: ""
+                    val title = call.argument<String>("title") ?: ""
+                    val subtitle = call.argument<String>("subtitle") ?: ""
+                    val thumbnailUrl = call.argument<String>("thumbnailUrl") ?: ""
+                    val contentType = call.argument<String>("contentType") ?: "video/mp4"
+                    val startPosition = call.argument<Double>("startPosition") ?: 0.0
+
+                    castService?.loadMedia(
+                        url = url,
+                        title = title,
+                        subtitle = subtitle,
+                        thumbnailUrl = thumbnailUrl,
+                        contentType = contentType,
+                        startPosition = startPosition
+                    ) { success, error ->
+                        if (success) {
+                            result.success(true)
+                        } else {
+                            result.error("LOAD_ERROR", error ?: "Failed to load media", null)
+                        }
+                    }
+                }
+                "play" -> {
+                    castService?.play()
+                    result.success(true)
+                }
+                "pause" -> {
+                    castService?.pause()
+                    result.success(true)
+                }
+                "stop" -> {
+                    castService?.stop()
+                    result.success(true)
+                }
+                "seek" -> {
+                    val position = call.argument<Double>("position") ?: 0.0
+                    castService?.seek(position)
+                    result.success(true)
+                }
+                "setVolume" -> {
+                    val volume = call.argument<Double>("volume") ?: 0.5
+                    castService?.setVolume(volume)
+                    result.success(true)
+                }
+                "isConnected" -> {
+                    result.success(castService?.isConnected() ?: false)
+                }
+                "getConnectedDeviceName" -> {
+                    result.success(castService?.getConnectedDeviceName() ?: "")
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun buildPipActions(playing: Boolean): List<RemoteAction> {
@@ -346,6 +435,12 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        try {
+            castService?.destroy()
+            castService = null
+        } catch (e: Exception) {
+            // ignore
+        }
         try {
             unregisterReceiver(pipReceiver)
         } catch (e: Exception) {

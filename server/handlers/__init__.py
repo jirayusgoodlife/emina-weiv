@@ -11,6 +11,7 @@ from .animenani import AnimenaniHandler
 from .fairyanime import FairyAnimeHandler
 from .animeruka import AnimeRukaHandler
 from .animewaku import AnimeWakuHandler
+from .wowdrama import WowDramaHandler
 from .halim import HalimHandler
 from .custom_rules import load_custom_rules
 from .generic import GenericHandler
@@ -28,6 +29,7 @@ def get_all_handlers() -> List[BaseSiteHandler]:
         FairyAnimeHandler(),
         AnimeRukaHandler(),
         AnimeWakuHandler(),
+        WowDramaHandler(),
     ]
     
     # Load dynamic user-defined site rules

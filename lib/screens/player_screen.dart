@@ -14,6 +14,8 @@ import '../providers/download_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/in_app_stream_proxy.dart';
 import '../services/pip_service.dart';
+import '../services/cast_service.dart';
+import '../widgets/cast_button.dart';
 import '../theme/app_theme.dart';
 import '../widgets/settings_sheet.dart';
 
@@ -52,6 +54,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isFullscreen = false;
   bool _autoRotate = true;
   bool _isPipMode = false;
+  bool _isCasting = false;
   SettingsProvider? _settings;
 
   // Gesture controls (Left = Brightness, Right = Volume)
@@ -99,6 +102,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _autoRotate = settings.autoRotate;
     settings.addListener(_onSettingsChanged);
     _applyOrientationPolicy();
+
+    // Initialize Cast listener
+    CastService.instance.addListener(_onCastServiceChanged);
+    _isCasting = CastService.instance.isConnected;
 
     // Restore saved brightness and volume (persists across all anime, episodes, and app restarts)
     if (settings.playerBrightness != null) {
@@ -165,6 +172,112 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  void _onCastServiceChanged() {
+    if (!mounted || _isDisposed) return;
+    final isConn = CastService.instance.isConnected;
+    if (_isCasting != isConn) {
+      setState(() {
+        _isCasting = isConn;
+      });
+      if (isConn) {
+        _controller?.pause();
+      }
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadMediaToCast() async {
+    if (!CastService.instance.isConnected) return;
+    _controller?.pause();
+
+    final downloadProv = Provider.of<DownloadProvider>(context, listen: false);
+    final dlItem = downloadProv.getDownload(currentEpisode.id ?? '');
+    final isOffline = dlItem != null && dlItem.isCompleted && File(dlItem.localFilePath).existsSync();
+
+    String castUrl = '';
+    String contentType = 'video/mp4';
+
+    if (isOffline) {
+      castUrl = await InAppStreamProxy.instance.getLanFileCastUrl(dlItem.localFilePath);
+      contentType = 'video/mp4';
+    } else {
+      var rawUrl = currentEpisode.streamUrl?.trim() ?? '';
+      if (rawUrl.isEmpty && (currentEpisode.pageUrl?.isNotEmpty ?? false)) {
+        final serverUrl = Provider.of<AnimeCatalogProvider>(context, listen: false).serverUrl;
+        try {
+          final res = await http.post(
+            Uri.parse('$serverUrl/api/resolve_stream'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'page_url': currentEpisode.pageUrl}),
+          ).timeout(const Duration(seconds: 10));
+          if (res.statusCode == 200) {
+            final data = jsonDecode(res.body);
+            final resolved = data['stream_url']?.toString() ?? '';
+            if (resolved.isNotEmpty) {
+              rawUrl = resolved;
+              currentEpisode.streamUrl = resolved;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (InAppStreamProxy.shouldProxyUrl(rawUrl)) {
+        if (!InAppStreamProxy.instance.isRunning) {
+          await InAppStreamProxy.instance.start();
+        }
+        castUrl = await InAppStreamProxy.instance.getLanCastUrl(rawUrl);
+        contentType = 'application/x-mpegurl';
+      } else {
+        castUrl = rawUrl;
+        contentType = (rawUrl.contains('.m3u8') || rawUrl.contains('/manifest'))
+            ? 'application/x-mpegurl'
+            : 'video/mp4';
+      }
+    }
+
+    if (castUrl.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ไม่มี URL สำหรับส่งขึ้นทีวี')),
+        );
+      }
+      return;
+    }
+
+    final currentPos = _controller?.value.position ?? Duration.zero;
+
+    final success = await CastService.instance.loadMedia(
+      url: castUrl,
+      title: widget.anime.title,
+      subtitle: currentEpisode.title ?? 'ตอนที่ ${_currentEpisodeIndex + 1}',
+      thumbnailUrl: widget.anime.backdropUrl ?? widget.anime.coverUrl,
+      contentType: contentType,
+      startPosition: currentPos,
+    );
+
+    if (mounted) {
+      if (success) {
+        setState(() => _isCasting = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('กำลังเล่นบนทีวี (${CastService.instance.connectedDeviceName})'),
+            backgroundColor: Colors.green.shade800,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ไม่สามารถส่งวิดีโอขึ้นทีวีได้ โปรดลองอีกครั้ง'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _updateAutoPip(bool enabled) {
     if (!mounted) return;
     int num = 16;
@@ -193,6 +306,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _togglePlay() {
+    if (_isCasting) {
+      if (CastService.instance.isPlaying) {
+        CastService.instance.pause();
+      } else {
+        CastService.instance.play();
+      }
+      _startHideTimer();
+      setState(() {});
+      return;
+    }
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
     if (c.value.isPlaying) {
@@ -411,6 +534,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     PipService.setAutoPip(enabled: false);
     PipService.onPipAction = null;
     PipService.resetBrightness();
+    CastService.instance.removeListener(_onCastServiceChanged);
     _settings?.removeListener(_onSettingsChanged);
     _settings = null;
     _hideTimer?.cancel();
@@ -731,6 +855,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       });
       _updateAutoPip(true);
       _startHideTimer();
+      if (_isCasting) {
+        activeController.pause();
+        _loadMediaToCast();
+      }
     } catch (e) {
       try {
         await activeController.pause();
@@ -776,9 +904,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _saveProgress({bool forceCompleted = false}) {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-    final pos = _controller!.value.position.inSeconds;
-    final dur = _controller!.value.duration.inSeconds;
+    int pos = 0;
+    int dur = 0;
+    if (_isCasting) {
+      pos = CastService.instance.currentPosition.inSeconds;
+      dur = CastService.instance.duration.inSeconds;
+    } else {
+      if (_controller == null || !_controller!.value.isInitialized) return;
+      pos = _controller!.value.position.inSeconds;
+      dur = _controller!.value.duration.inSeconds;
+    }
     if (pos > 0 && currentEpisode.id != null) {
       final provider = Provider.of<AnimeCatalogProvider>(context, listen: false);
       provider.updateWatchProgress(
@@ -840,6 +975,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _seekRelative(int seconds) {
+    if (_isCasting) {
+      final current = CastService.instance.currentPosition;
+      final dur = CastService.instance.duration;
+      final target = current + Duration(seconds: seconds);
+      final clamped = target < Duration.zero
+          ? Duration.zero
+          : (dur > Duration.zero && target > dur ? dur : target);
+      CastService.instance.seek(clamped);
+      _startHideTimer();
+      return;
+    }
     if (_controller == null) return;
     final current = _controller!.value.position;
     final target = current + Duration(seconds: seconds);
@@ -930,8 +1076,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final screenSize = MediaQuery.of(context).size;
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape ||
         screenSize.width > 600;
-    final dur = _controller?.value.duration ?? Duration.zero;
-    final pos = _controller?.value.position ?? Duration.zero;
+    final dur = _isCasting && CastService.instance.duration > Duration.zero
+        ? CastService.instance.duration
+        : (_controller?.value.duration ?? Duration.zero);
+    final pos = _isCasting
+        ? CastService.instance.currentPosition
+        : (_controller?.value.position ?? Duration.zero);
     final remainingSeconds = dur.inSeconds - pos.inSeconds;
     // แสดงเฉพาะช่วงท้ายของตอน ตามช่วงเวลาที่ผู้ใช้ตั้งไว้ในหน้าตั้งค่า (ค่ามาตรฐาน 180 วินาที)
     final isInNextEpisodeWindow = dur > Duration.zero &&
@@ -1019,16 +1169,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             children: [
               // Video Surface
               Center(
-                child: _controller != null && _controller!.value.isInitialized
-                    ? FittedBox(
-                        fit: _videoFit,
-                        child: SizedBox(
-                          width: _controller!.value.size.width,
-                          height: _controller!.value.size.height,
-                          child: VideoPlayer(_controller!),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                child: _isCasting
+                    ? _buildCastingView()
+                    : (_controller != null && _controller!.value.isInitialized
+                        ? FittedBox(
+                            fit: _videoFit,
+                            child: SizedBox(
+                              width: _controller!.value.size.width,
+                              height: _controller!.value.size.height,
+                              child: VideoPlayer(_controller!),
+                            ),
+                          )
+                        : const SizedBox.shrink()),
               ),
 
               // Software Extra-Dim Overlay (for ultra-low brightness in pitch-dark rooms)
@@ -1263,6 +1415,118 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
+  Widget _buildCastingView() {
+    return Container(
+      color: const Color(0xFF0A0C10),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if ((widget.anime.backdropUrl ?? widget.anime.coverUrl).isNotEmpty)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.15,
+                child: CachedNetworkImage(
+                  imageUrl: widget.anime.backdropUrl ?? widget.anime.coverUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.accent.withOpacity(0.5), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.25),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.cast_connected,
+                      size: 56,
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'กำลังส่งภาพและเสียงขึ้นจอทีวี',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    CastService.instance.connectedDeviceName.isNotEmpty
+                        ? CastService.instance.connectedDeviceName
+                        : 'Chromecast',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.accent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.anime.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    currentEpisode.title ?? 'ตอนที่ ${_currentEpisodeIndex + 1}',
+                    style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 24),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final currentPos = CastService.instance.currentPosition;
+                      await CastService.instance.disconnect();
+                      if (mounted) {
+                        setState(() => _isCasting = false);
+                        if (_controller != null && _controller!.value.isInitialized) {
+                          await _controller!.seekTo(currentPos);
+                          _controller!.play();
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.phone_android, size: 16),
+                    label: const Text('สลับกลับมาดูบนมือถือ'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white30),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControlsOverlay(Duration pos, Duration dur) {
     return Container(
       decoration: const BoxDecoration(
@@ -1465,6 +1729,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                     },
                   ),
 
+                  // Chromecast Button
+                  CastButton(
+                    onConnected: () {
+                      _loadMediaToCast();
+                    },
+                  ),
+
                   // Picture-in-Picture Button
                   Tooltip(
                     message: 'เล่นแบบหน้าต่างลอย (Picture-in-Picture)',
@@ -1533,7 +1804,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       ],
                     ),
                     child: Icon(
-                      _controller?.value.isPlaying ?? false ? Icons.pause : Icons.play_arrow,
+                      (_isCasting
+                              ? CastService.instance.isPlaying
+                              : (_controller?.value.isPlaying ?? false))
+                          ? Icons.pause
+                          : Icons.play_arrow,
                       size: 40,
                       color: Colors.white,
                     ),
@@ -1597,9 +1872,17 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       },
                       onChangeEnd: (val) {
                         _isDraggingBottomSlider = false;
-                        _controller?.seekTo(Duration(milliseconds: val.toInt()));
-                        if (!(_controller?.value.isPlaying ?? true)) {
-                          _controller?.play();
+                        final targetPos = Duration(milliseconds: val.toInt());
+                        if (_isCasting) {
+                          CastService.instance.seek(targetPos);
+                          if (!CastService.instance.isPlaying) {
+                            CastService.instance.play();
+                          }
+                        } else {
+                          _controller?.seekTo(targetPos);
+                          if (!(_controller?.value.isPlaying ?? true)) {
+                            _controller?.play();
+                          }
                         }
                         _startHideTimer();
                       },

@@ -15,6 +15,7 @@ from handlers.animenani import AnimenaniHandler, decode_animenani_bootstrap
 from handlers.fairyanime import FairyAnimeHandler
 from handlers.animeruka import AnimeRukaHandler
 from handlers.animewaku import AnimeWakuHandler
+from handlers.wowdrama import WowDramaHandler
 from handlers.halim import HalimHandler
 
 HEADERS = {
@@ -553,7 +554,14 @@ async def resolve_direct_stream(page_url: str, client: Optional[httpx.AsyncClien
             if res:
                 return res
 
-        # 5. Universal generic fallback
+        # 8. Wow-Drama / Miru Player fallback
+        wowdrama = WowDramaHandler()
+        if wowdrama.can_handle(page_url, html=html):
+            res = await wowdrama.resolve_stream(page_url, html, soup, client, settings=settings)
+            if res:
+                return res
+
+        # 9. Universal generic fallback
         res = await GenericHandler().resolve_stream(page_url, html, soup, client, settings=settings)
         if res:
             return res
