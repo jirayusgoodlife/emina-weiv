@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -199,10 +200,30 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     String contentType = 'video/mp4';
 
     if (isOffline) {
-      castUrl = await InAppStreamProxy.instance.getLanFileCastUrl(dlItem.localFilePath);
-      contentType = 'video/mp4';
+      if (!InAppStreamProxy.instance.isRunning) {
+        await InAppStreamProxy.instance.start();
+      }
+      final isTs = dlItem.localFilePath.toLowerCase().endsWith('.ts');
+      if (isTs) {
+        final durSeconds = (_controller?.value.duration.inSeconds ?? 1440).toDouble();
+        castUrl = await InAppStreamProxy.instance.getLanFilePlaylistCastUrl(
+          dlItem.localFilePath,
+          durationSeconds: durSeconds > 0 ? durSeconds : 1440.0,
+        );
+        contentType = 'application/vnd.apple.mpegurl';
+      } else {
+        castUrl = await InAppStreamProxy.instance.getLanFileCastUrl(dlItem.localFilePath);
+        contentType = 'video/mp4';
+      }
     } else {
       var rawUrl = currentEpisode.streamUrl?.trim() ?? '';
+      if (rawUrl.contains('127.0.0.1') || rawUrl.contains('localhost')) {
+        final uri = Uri.tryParse(rawUrl);
+        final orig = uri?.queryParameters['url'];
+        if (orig != null && orig.isNotEmpty) {
+          rawUrl = orig;
+        }
+      }
       if (rawUrl.isEmpty && (currentEpisode.pageUrl?.isNotEmpty ?? false)) {
         final serverUrl = Provider.of<AnimeCatalogProvider>(context, listen: false).serverUrl;
         try {
@@ -222,18 +243,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         } catch (_) {}
       }
 
-      if (InAppStreamProxy.shouldProxyUrl(rawUrl)) {
-        if (!InAppStreamProxy.instance.isRunning) {
-          await InAppStreamProxy.instance.start();
-        }
-        castUrl = await InAppStreamProxy.instance.getLanCastUrl(rawUrl);
-        contentType = 'application/x-mpegurl';
-      } else {
-        castUrl = rawUrl;
-        contentType = (rawUrl.contains('.m3u8') || rawUrl.contains('/manifest'))
-            ? 'application/x-mpegurl'
-            : 'video/mp4';
+      if (!InAppStreamProxy.instance.isRunning) {
+        await InAppStreamProxy.instance.start();
       }
+      castUrl = await InAppStreamProxy.instance.getLanCastUrl(rawUrl);
+      final lower = rawUrl.toLowerCase();
+      contentType = (lower.contains('.mp4') && !lower.contains('.m3u8'))
+          ? 'video/mp4'
+          : 'application/vnd.apple.mpegurl';
     }
 
     if (castUrl.isEmpty) {
@@ -276,6 +293,56 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         );
       }
     }
+    _syncWebTvMedia();
+  }
+
+  Future<void> _syncWebTvMedia() async {
+    try {
+      if (!InAppStreamProxy.instance.isRunning) {
+        await InAppStreamProxy.instance.start();
+      }
+      if (!mounted) return;
+      final downloadProv = Provider.of<DownloadProvider>(context, listen: false);
+      final dlItem = downloadProv.getDownload(currentEpisode.id ?? '');
+      final isOffline = dlItem != null && dlItem.isCompleted && File(dlItem.localFilePath).existsSync();
+
+      String streamUrl = '';
+      if (isOffline) {
+        final isTs = dlItem.localFilePath.toLowerCase().endsWith('.ts');
+        if (isTs) {
+          final durSeconds = (_controller?.value.duration.inSeconds ?? 1440).toDouble();
+          streamUrl = await InAppStreamProxy.instance.getLanFilePlaylistCastUrl(
+            dlItem.localFilePath,
+            durationSeconds: durSeconds > 0 ? durSeconds : 1440.0,
+          );
+        } else {
+          streamUrl = await InAppStreamProxy.instance.getLanFileCastUrl(dlItem.localFilePath);
+        }
+      } else {
+        var rawUrl = currentEpisode.streamUrl?.trim() ?? '';
+        if (rawUrl.contains('127.0.0.1') || rawUrl.contains('localhost')) {
+          final uri = Uri.tryParse(rawUrl);
+          final orig = uri?.queryParameters['url'];
+          if (orig != null && orig.isNotEmpty) rawUrl = orig;
+        }
+        if (rawUrl.isNotEmpty) {
+          streamUrl = await InAppStreamProxy.instance.getLanCastUrl(rawUrl);
+        }
+      }
+
+      if (streamUrl.isNotEmpty) {
+        final currentPos = (_controller?.value.position.inSeconds ?? 0).toDouble();
+        InAppStreamProxy.instance.updateWebTvMedia(
+          title: widget.anime.title,
+          subtitle: currentEpisode.title ?? 'ตอนที่ ${_currentEpisodeIndex + 1}',
+          streamUrl: streamUrl,
+          thumbnailUrl: widget.anime.backdropUrl ?? widget.anime.coverUrl,
+          startPosition: currentPos,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) print('[PlayerScreen] Failed to sync Web TV: $e');
+    }
   }
 
   void _updateAutoPip(bool enabled) {
@@ -315,6 +382,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _startHideTimer();
       setState(() {});
       return;
+    }
+    if (InAppStreamProxy.instance.isWebTvActive) {
+      final isPlaying = InAppStreamProxy.instance.tvState == 'PLAYING';
+      InAppStreamProxy.instance.sendWebTvCommand(isPlaying ? 'pause' : 'play');
     }
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
@@ -859,6 +930,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         activeController.pause();
         _loadMediaToCast();
       }
+      _syncWebTvMedia();
     } catch (e) {
       try {
         await activeController.pause();
@@ -985,6 +1057,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       CastService.instance.seek(clamped);
       _startHideTimer();
       return;
+    }
+    if (InAppStreamProxy.instance.isWebTvActive) {
+      final currentSec = InAppStreamProxy.instance.tvPosition;
+      final durSec = InAppStreamProxy.instance.tvDuration;
+      final targetSec = (currentSec + seconds).clamp(0.0, durSec > 0 ? durSec : 999999.0);
+      InAppStreamProxy.instance.sendWebTvCommand('seek', seekTime: targetSec);
     }
     if (_controller == null) return;
     final current = _controller!.value.position;
@@ -1551,7 +1629,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    padding: const EdgeInsets.all(4),
+                    visualDensity: VisualDensity.compact,
                     onPressed: () {
                       if (_isFullscreen) {
                         _exitFullscreen();
@@ -1579,22 +1660,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       children: [
                         Row(
                           children: [
-                            Flexible(
+                            Expanded(
                               child: Text(
                                 widget.anime.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
                             if (_isOfflinePlayback) ...[
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.green.withOpacity(0.25),
                                   borderRadius: BorderRadius.circular(6),
@@ -1603,8 +1684,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.offline_bolt, color: Colors.green, size: 12),
-                                    SizedBox(width: 3),
+                                    Icon(Icons.offline_bolt, color: Colors.green, size: 11),
+                                    SizedBox(width: 2),
                                     Text(
                                       'ออฟไลน์',
                                       style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
@@ -1617,7 +1698,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         ),
                         Text(
                           currentEpisode.title ?? 'ตอนที่ ${_currentEpisodeIndex + 1}',
-                          style: const TextStyle(color: AppTheme.accent, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppTheme.accent, fontSize: 12),
                         ),
                       ],
                     ),
@@ -1625,18 +1708,28 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
                   // Episodes Drawer Button (if more than 1 episode)
                   if (widget.anime.episodes.length > 1) ...[
-                    TextButton.icon(
-                      onPressed: _showEpisodeSelectorSheet,
-                      icon: const Icon(Icons.video_library_outlined, color: Colors.white, size: 16),
-                      label: const Text('เลือกตอน', style: TextStyle(color: Colors.white, fontSize: 11)),
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white12,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    if (_isFullscreen)
+                      TextButton.icon(
+                        onPressed: _showEpisodeSelectorSheet,
+                        icon: const Icon(Icons.video_library_outlined, color: Colors.white, size: 16),
+                        label: const Text('เลือกตอน', style: TextStyle(color: Colors.white, fontSize: 11)),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white12,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.video_library_outlined, color: Colors.white, size: 21),
+                        tooltip: 'เลือกตอน',
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                        padding: const EdgeInsets.all(4),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _showEpisodeSelectorSheet,
                       ),
-                    ),
                     const SizedBox(width: 2),
                   ],
 

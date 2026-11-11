@@ -8,6 +8,7 @@ class CastDeviceInfo {
   final String host;
   final int port;
   final String model;
+  final String type;
 
   const CastDeviceInfo({
     required this.id,
@@ -15,17 +16,26 @@ class CastDeviceInfo {
     required this.host,
     required this.port,
     this.model = '',
+    this.type = 'chromecast',
   });
 
   factory CastDeviceInfo.fromMap(Map<dynamic, dynamic> map) {
+    final rawName = map['name']?.toString() ?? '';
+    final rawModel = map['model']?.toString() ?? '';
+    final name = rawName.isNotEmpty ? rawName : (rawModel.isNotEmpty ? rawModel : 'Chromecast');
+
     return CastDeviceInfo(
       id: map['id']?.toString() ?? '',
-      name: map['name']?.toString() ?? 'Chromecast',
+      name: name,
       host: map['host']?.toString() ?? '',
       port: (map['port'] as num?)?.toInt() ?? 8009,
-      model: map['model']?.toString() ?? '',
+      model: rawModel,
+      type: map['type']?.toString() ?? 'chromecast',
     );
   }
+
+  bool get isDlna => type == 'dlna';
+  bool get isChromecast => type != 'dlna';
 
   @override
   bool operator ==(Object other) =>
@@ -85,8 +95,14 @@ class CastService extends ChangeNotifier {
         final data = call.arguments as Map<dynamic, dynamic>?;
         if (data != null) {
           final device = CastDeviceInfo.fromMap(data);
-          if (!_devices.any((d) => d.id == device.id)) {
+          final existingIdx = _devices.indexWhere(
+            (d) => d.id == device.id || (d.host.isNotEmpty && d.host == device.host),
+          );
+          if (existingIdx == -1) {
             _devices.add(device);
+            notifyListeners();
+          } else {
+            _devices[existingIdx] = device;
             notifyListeners();
           }
         }

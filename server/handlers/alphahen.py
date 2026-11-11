@@ -20,7 +20,7 @@ class AlphaHenHandler(BaseSiteHandler):
     def can_handle(self, url: str, html: Optional[str] = None) -> bool:
         if super().can_handle(url):
             return True
-        if html and ("miru-player" in html or "EzmeAlphaHen" in html or "ez-episode-list" in html or "ez-watch-player" in html):
+        if html and ("EzmeAlphaHen" in html or "ez-episode-list" in html or "ez-watch-player" in html or "alpha-hen.com" in html):
             return True
         return False
 

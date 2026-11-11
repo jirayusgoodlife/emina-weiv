@@ -32,6 +32,25 @@ void main() {
       expect(device.host, '');
       expect(device.port, 8009);
       expect(device.model, '');
+      expect(device.isChromecast, isTrue);
+      expect(device.isDlna, isFalse);
+    });
+
+    test('CastDeviceInfo parses DLNA device correctly', () {
+      final map = {
+        'id': 'uuid:samsung-tv-1234',
+        'name': 'Samsung 7 Series (55)',
+        'host': '192.168.1.150',
+        'port': 7676,
+        'model': 'Samsung Smart TV',
+        'type': 'dlna',
+      };
+      final device = CastDeviceInfo.fromMap(map);
+
+      expect(device.name, 'Samsung 7 Series (55)');
+      expect(device.model, 'Samsung Smart TV');
+      expect(device.isDlna, isTrue);
+      expect(device.isChromecast, isFalse);
     });
 
     test('CastDeviceInfo equality is based on id', () {

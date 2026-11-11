@@ -21,6 +21,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "custom_s
 def get_all_handlers() -> List[BaseSiteHandler]:
     """Returns all registered handlers in priority order."""
     handlers: List[BaseSiteHandler] = [
+        WowDramaHandler(),
         AnifumeHandler(),
         AlphaHenHandler(),
         HalimHandler(),
@@ -29,7 +30,6 @@ def get_all_handlers() -> List[BaseSiteHandler]:
         FairyAnimeHandler(),
         AnimeRukaHandler(),
         AnimeWakuHandler(),
-        WowDramaHandler(),
     ]
     
     # Load dynamic user-defined site rules

@@ -144,6 +144,28 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         },
         "strip_fake_headers": False
     })
+    rules.append({
+        "name": "GetPlay CDN",
+        "match_domains": ["getplay-cdn"],
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://getplay-cdn.com/",
+            "Origin": "https://getplay-cdn.com",
+            "Accept": "*/*"
+        },
+        "strip_fake_headers": False
+    })
+    rules.append({
+        "name": "OK-HD / OK-720",
+        "match_domains": ["ok-hd", "ok-720"],
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://ok-hd.com/",
+            "Origin": "https://ok-hd.com",
+            "Accept": "*/*"
+        },
+        "strip_fake_headers": False
+    })
 
     # 2. Dynamic custom sites proxy rules
     for site in custom_sites:
