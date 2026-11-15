@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/download_item.dart';
 import '../models/isar_models.dart';
 import '../services/in_app_stream_proxy.dart';
+import '../services/storage_service.dart';
 
 class DownloadedAnimeGroup {
   final String animeSlug;
@@ -62,6 +63,7 @@ class DownloadProvider extends ChangeNotifier {
   bool _isProcessingQueue = false;
   String? _activeEpisodeId;
   Timer? _expirationTimer;
+  DeviceStorageInfo? _deviceStorage;
 
   static const String _prefDownloadsKey = 'pref_downloaded_episodes_v1';
 
@@ -71,10 +73,20 @@ class DownloadProvider extends ChangeNotifier {
 
   DownloadProvider({required SharedPreferences prefs}) : _prefs = prefs {
     _loadFromPrefs();
+    refreshStorageSpace();
     // Periodically check and clean expired files every 15 minutes
     _expirationTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       checkAndCleanExpiredFiles();
     });
+  }
+
+  DeviceStorageInfo? get deviceStorage => _deviceStorage;
+
+  Future<void> refreshStorageSpace() async {
+    try {
+      _deviceStorage = await StorageService.getDeviceStorage();
+      notifyListeners();
+    } catch (_) {}
   }
 
   @override
@@ -157,6 +169,51 @@ class DownloadProvider extends ChangeNotifier {
       return '${(total / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
     }
     return '${(total / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  /// Returns true if all episodes of this anime with valid IDs are completely downloaded
+  bool isAnimeFullyDownloaded(AnimeCollection anime) {
+    if (anime.episodes.isEmpty) return false;
+    for (final ep in anime.episodes) {
+      final epId = ep.id;
+      if (epId != null && epId.isNotEmpty) {
+        if (!isDownloaded(epId)) return false;
+      }
+    }
+    return true;
+  }
+
+  /// Returns true if any episode of this anime is actively downloading or queued
+  bool isAnimeDownloading(String animeSlug) {
+    for (final item in _downloads.values) {
+      if (item.animeSlug == animeSlug && item.isDownloading) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Returns how many episodes of this anime are already downloaded
+  int getDownloadedEpisodesCount(AnimeCollection anime) {
+    int count = 0;
+    for (final ep in anime.episodes) {
+      final epId = ep.id;
+      if (epId != null && epId.isNotEmpty && isDownloaded(epId)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /// Returns how many episodes of this anime are currently downloading or queued
+  int getDownloadingEpisodesCount(String animeSlug) {
+    int count = 0;
+    for (final item in _downloads.values) {
+      if (item.animeSlug == animeSlug && item.isDownloading) {
+        count++;
+      }
+    }
+    return count;
   }
 
   void _loadFromPrefs() {
@@ -295,16 +352,16 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
-  /// Queue an episode for sequential, multi-part download
-  Future<void> startDownload({
+  /// Internal helper to create and queue an episode request
+  Future<_QueuedDownloadRequest?> _enqueueEpisodeItem({
     required AnimeCollection anime,
     required EpisodeEmbedded episode,
     String? serverUrl,
   }) async {
     final epId = episode.id;
-    if (epId == null || epId.isEmpty) return;
+    if (epId == null || epId.isEmpty) return null;
 
-    if (isDownloading(epId)) return;
+    if (isDownloading(epId)) return null;
     _cancelledIds.remove(epId);
 
     final docDir = await getApplicationDocumentsDirectory();
@@ -340,8 +397,6 @@ class DownloadProvider extends ChangeNotifier {
     );
 
     _downloads[epId] = downloadItem;
-    await _saveToPrefs();
-    notifyListeners();
 
     final req = _QueuedDownloadRequest(
       anime: anime,
@@ -349,12 +404,98 @@ class DownloadProvider extends ChangeNotifier {
       serverUrl: serverUrl,
     );
     _downloadQueue.add(req);
+    return req;
+  }
+
+  /// Queue an episode for sequential, multi-part download
+  Future<void> startDownload({
+    required AnimeCollection anime,
+    required EpisodeEmbedded episode,
+    String? serverUrl,
+  }) async {
+    final req = await _enqueueEpisodeItem(
+      anime: anime,
+      episode: episode,
+      serverUrl: serverUrl,
+    );
+    if (req == null) return;
+
+    await _saveToPrefs();
+    notifyListeners();
 
     // Process download queue sequentially (one episode at a time)
     _processQueue();
 
     // Await this specific request's turn
     await req.completer.future;
+  }
+
+  /// Queue all pending episodes of an anime collection for offline download
+  Future<int> downloadAllEpisodes({
+    required AnimeCollection anime,
+    String? serverUrl,
+  }) async {
+    int queuedCount = 0;
+    for (final episode in anime.episodes) {
+      final epId = episode.id;
+      if (epId == null || epId.isEmpty) continue;
+      // Skip if already completed
+      if (isDownloaded(epId)) continue;
+      // Skip if already downloading or queued
+      if (isDownloading(epId)) continue;
+
+      final req = await _enqueueEpisodeItem(
+        anime: anime,
+        episode: episode,
+        serverUrl: serverUrl,
+      );
+      if (req != null) {
+        queuedCount++;
+      }
+    }
+
+    if (queuedCount > 0) {
+      await _saveToPrefs();
+      notifyListeners();
+      _processQueue();
+    }
+    return queuedCount;
+  }
+
+  /// Cancel all active and queued downloads for a specific anime
+  Future<void> cancelAnimeDownloads(String animeSlug) async {
+    // 1. Cancel and remove from queued requests
+    final toRemoveQueue = <_QueuedDownloadRequest>[];
+    for (final req in _downloadQueue) {
+      if (req.anime.slug == animeSlug) {
+        toRemoveQueue.add(req);
+        final epId = req.episode.id;
+        if (epId != null) {
+          _cancelledIds.add(epId);
+          _downloads.remove(epId);
+          if (!req.completer.isCompleted) req.completer.complete();
+        }
+      }
+    }
+    for (final req in toRemoveQueue) {
+      _downloadQueue.remove(req);
+    }
+
+    // 2. If active episode is from this anime, cancel it
+    if (_activeEpisodeId != null) {
+      final activeItem = _downloads[_activeEpisodeId];
+      if (activeItem != null && activeItem.animeSlug == animeSlug) {
+        await cancelDownload(_activeEpisodeId!);
+      }
+    }
+
+    // 3. Remove queued items for this anime from _downloads
+    _downloads.removeWhere((id, item) =>
+        item.animeSlug == animeSlug && (item.status == DownloadStatus.queued || item.status == DownloadStatus.downloading));
+
+    await _saveToPrefs();
+    notifyListeners();
+    refreshStorageSpace();
   }
 
   /// Background sequential queue processor
@@ -509,6 +650,7 @@ class DownloadProvider extends ChangeNotifier {
     _cancelledIds.remove(epId);
     await _saveToPrefs();
     notifyListeners();
+    refreshStorageSpace();
   }
 
   /// Multi-worker parallel segment downloader for HLS (like IDM)
@@ -910,6 +1052,7 @@ class DownloadProvider extends ChangeNotifier {
       _downloads.remove(episodeId);
       await _saveToPrefs();
       notifyListeners();
+      refreshStorageSpace();
     }
   }
 
@@ -981,6 +1124,9 @@ class DownloadProvider extends ChangeNotifier {
 
   /// Delete all downloads for a specific anime
   Future<void> deleteAnimeDownloads(String slug) async {
+    // Also remove from queue if any
+    _downloadQueue.removeWhere((req) => req.anime.slug == slug);
+
     final toRemove = <String>[];
     for (final item in _downloads.values) {
       if (item.animeSlug == slug) {
@@ -1000,5 +1146,6 @@ class DownloadProvider extends ChangeNotifier {
     }
     await _saveToPrefs();
     notifyListeners();
+    refreshStorageSpace();
   }
 }

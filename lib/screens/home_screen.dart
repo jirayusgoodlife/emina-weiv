@@ -242,21 +242,33 @@ class _HomeScreenState extends State<HomeScreen> {
                             itemBuilder: (context, index) {
                               final genre = provider.availableGenres[index];
                               final isSelected = provider.selectedGenre == genre;
+                              final isHiddenTab = genre == AnimeCatalogProvider.hiddenGenreName;
 
                               return ChoiceChip(
+                                avatar: isHiddenTab
+                                    ? Icon(
+                                        Icons.visibility_off_outlined,
+                                        size: 14,
+                                        color: isSelected ? Colors.white : Colors.orangeAccent,
+                                      )
+                                    : null,
                                 label: Text(
-                                  genre,
+                                  isHiddenTab ? 'ที่ซ่อนอยู่ (${provider.hiddenCount})' : genre,
                                   style: TextStyle(
-                                    color: isSelected ? Colors.white : AppTheme.textMuted,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : (isHiddenTab ? Colors.orangeAccent : AppTheme.textMuted),
                                     fontSize: 12,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                   ),
                                 ),
                                 selected: isSelected,
-                                selectedColor: AppTheme.primary,
-                                backgroundColor: AppTheme.cardLight,
+                                selectedColor: isHiddenTab ? Colors.orange.shade800 : AppTheme.primary,
+                                backgroundColor: isHiddenTab ? Colors.orange.withOpacity(0.12) : AppTheme.cardLight,
                                 side: BorderSide(
-                                  color: isSelected ? AppTheme.primary : Colors.white12,
+                                  color: isSelected
+                                      ? (isHiddenTab ? Colors.orangeAccent : AppTheme.primary)
+                                      : (isHiddenTab ? Colors.orange.withOpacity(0.3) : Colors.white12),
                                 ),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 onSelected: (_) => provider.setSelectedGenre(genre),
@@ -277,7 +289,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Text(
                                 provider.selectedGenre == 'ทั้งหมด'
                                     ? 'รายการทั้งหมด (${allAnime.length} เรื่อง)'
-                                    : 'หมวดหมู่: ${provider.selectedGenre} (${allAnime.length} เรื่อง)',
+                                    : provider.selectedGenre == AnimeCatalogProvider.hiddenGenreName
+                                        ? 'รายการที่ซ่อนไว้ (${allAnime.length} เรื่อง)'
+                                        : 'หมวดหมู่: ${provider.selectedGenre} (${allAnime.length} เรื่อง)',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -328,36 +342,62 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                    // Gallery Content (3-Columns Grid or List)
-                    settings.isListView
-                        ? SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  return AnimeListCard(anime: allAnime[index]);
-                                },
-                                childCount: allAnime.length,
+                    // Gallery Content (3-Columns Grid or List or Empty Tab)
+                    allAnime.isEmpty
+                        ? SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 60),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      provider.selectedGenre == AnimeCatalogProvider.hiddenGenreName
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.movie_filter_outlined,
+                                      size: 48,
+                                      color: Colors.white24,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      provider.selectedGenre == AnimeCatalogProvider.hiddenGenreName
+                                          ? 'ไม่มีรายการที่ซ่อนอยู่'
+                                          : 'ไม่พบรายการในหมวดนี้',
+                                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 14),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           )
-                        : SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            sliver: SliverGrid(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 0.56,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 14,
+                        : settings.isListView
+                            ? SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                sliver: SliverList(
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      return AnimeListCard(anime: allAnime[index]);
+                                    },
+                                    childCount: allAnime.length,
+                                  ),
+                                ),
+                              )
+                            : SliverPadding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                sliver: SliverGrid(
+                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 3,
+                                    childAspectRatio: 0.56,
+                                    crossAxisSpacing: 10,
+                                    mainAxisSpacing: 14,
+                                  ),
+                                  delegate: SliverChildBuilderDelegate(
+                                    (context, index) {
+                                      return AnimeGridCard(anime: allAnime[index]);
+                                    },
+                                    childCount: allAnime.length,
+                                  ),
+                                ),
                               ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  return AnimeGridCard(anime: allAnime[index]);
-                                },
-                                childCount: allAnime.length,
-                              ),
-                            ),
-                          ),
 
                     const SliverToBoxAdapter(
                       child: SizedBox(height: 30),
@@ -914,9 +954,17 @@ class _AppDrawer extends StatelessWidget {
                 ),
                 title: Text('รายการที่ซ่อนไว้ (${provider.hiddenCount})',
                     style: _tileStyle),
+                trailing: IconButton(
+                  icon: const Icon(Icons.manage_search, color: Colors.white38, size: 20),
+                  tooltip: 'จัดการรายการที่ซ่อน',
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    AnimeActionSheet.showHiddenAnimeBottomSheet(context);
+                  },
+                ),
                 onTap: () {
                   Navigator.of(context).pop();
-                  AnimeActionSheet.showHiddenAnimeBottomSheet(context);
+                  provider.selectHiddenTab();
                 },
               ),
 

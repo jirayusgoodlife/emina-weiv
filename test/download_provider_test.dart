@@ -296,5 +296,38 @@ void main() {
       await provider.checkAndCleanExpiredFiles();
       expect(provider.getDownload('bleach-ep-1'), isNotNull);
     });
+
+    test('downloadAllEpisodes queues all episodes and supports cancellation and helpers', () async {
+      final anime = AnimeCollection()
+        ..slug = 'naruto'
+        ..title = 'Naruto';
+
+      final ep1 = EpisodeEmbedded()
+        ..id = 'naruto-1'
+        ..title = 'ตอนที่ 1'
+        ..episodeNumber = 1.0
+        ..streamUrl = '';
+      final ep2 = EpisodeEmbedded()
+        ..id = 'naruto-2'
+        ..title = 'ตอนที่ 2'
+        ..episodeNumber = 2.0
+        ..streamUrl = '';
+      final ep3 = EpisodeEmbedded()
+        ..id = 'naruto-3'
+        ..title = 'ตอนที่ 3'
+        ..episodeNumber = 3.0
+        ..streamUrl = '';
+
+      anime.episodes = [ep1, ep2, ep3];
+
+      // Download all
+      final queuedCount = await provider.downloadAllEpisodes(anime: anime);
+      expect(queuedCount, 3);
+      expect(provider.isAnimeDownloading('naruto'), isTrue);
+
+      // Cancel all downloads
+      await provider.cancelAnimeDownloads('naruto');
+      expect(provider.isAnimeDownloading('naruto'), isFalse);
+    });
   });
 }

@@ -8,8 +8,23 @@ import '../providers/download_provider.dart';
 import '../screens/player_screen.dart';
 import '../theme/app_theme.dart';
 
-class DownloadsScreen extends StatelessWidget {
+class DownloadsScreen extends StatefulWidget {
   const DownloadsScreen({Key? key}) : super(key: key);
+
+  @override
+  State<DownloadsScreen> createState() => _DownloadsScreenState();
+}
+
+class _DownloadsScreenState extends State<DownloadsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<DownloadProvider>(context, listen: false).refreshStorageSpace();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +33,7 @@ class DownloadsScreen extends StatelessWidget {
     final totalDownloadsCount = downloadProvider.allDownloads.length;
     final completed = downloadProvider.completedDownloads;
     final failed = downloadProvider.failedDownloads;
+    final storageInfo = downloadProvider.deviceStorage;
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -49,7 +65,7 @@ class DownloadsScreen extends StatelessWidget {
         ],
       ),
       body: groups.isEmpty
-          ? _buildEmptyState(context)
+          ? _buildEmptyState(context, downloadProvider)
           : CustomScrollView(
               slivers: [
                 // Storage and Expiration Rule Summary Card
@@ -90,25 +106,94 @@ class DownloadsScreen extends StatelessWidget {
                               child: const Icon(Icons.storage, color: AppTheme.accent, size: 26),
                             ),
                             const SizedBox(width: 14),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  downloadProvider.formattedTotalStorage,
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        downloadProvider.formattedTotalStorage,
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      if (storageInfo != null && storageInfo.isValid)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.green.withOpacity(0.3)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.disc_full, size: 12, color: Colors.greenAccent),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'ว่าง: ${storageInfo.formattedFree}',
+                                                style: const TextStyle(
+                                                  color: Colors.greenAccent,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                                ),
-                                Text(
-                                  'ใช้พื้นที่ในเครื่อง • ${groups.length} เรื่อง • $totalDownloadsCount ตอน',
-                                  style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                                ),
-                              ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'ใช้พื้นที่ในแอป • ${groups.length} เรื่อง • $totalDownloadsCount ตอน',
+                                    style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
+
+                        // Device Remaining Storage Bar & Info
+                        if (storageInfo != null && storageInfo.isValid) ...[
+                          const SizedBox(height: 14),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: storageInfo.usedPercentage,
+                              backgroundColor: Colors.white12,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                storageInfo.freeBytes < 2 * 1024 * 1024 * 1024
+                                    ? Colors.redAccent
+                                    : AppTheme.accent,
+                              ),
+                              minHeight: 6,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'เครื่องใช้ไป ${storageInfo.formattedUsed} / ทั้งหมด ${storageInfo.formattedTotal}',
+                                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                              ),
+                              Text(
+                                'พื้นที่เครื่องเหลือ ${storageInfo.formattedFree}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.greenAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+
                         const SizedBox(height: 14),
                         const Divider(color: Colors.white10),
                         const SizedBox(height: 8),
@@ -397,7 +482,9 @@ class DownloadsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, DownloadProvider downloadProvider) {
+    final storageInfo = downloadProvider.deviceStorage;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -436,7 +523,29 @@ class DownloadsScreen extends StatelessWidget {
                 height: 1.5,
               ),
             ),
-            const SizedBox(height: 24),
+            if (storageInfo != null && storageInfo.isValid) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.storage, size: 16, color: Colors.greenAccent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'พื้นที่ว่างในเครื่องเหลือ: ${storageInfo.formattedFree} (จากทั้งหมด ${storageInfo.formattedTotal})',
+                      style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: () => Navigator.of(context).pop(),
               icon: const Icon(Icons.arrow_back),

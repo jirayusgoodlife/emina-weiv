@@ -25,6 +25,8 @@ class AnimeCatalogProvider extends ChangeNotifier {
   static const String _prefServerUrlKey = 'pref_sync_server_url';
   static const String _prefHiddenSlugsKey = 'pref_hidden_anime_slugs';
 
+  static const String hiddenGenreName = 'ที่ซ่อนอยู่';
+
   AnimeCatalogProvider({
     required IsarService isarService,
     required SharedPreferences prefs,
@@ -36,8 +38,15 @@ class AnimeCatalogProvider extends ChangeNotifier {
   }
 
   List<AnimeCollection> get allAnime => _allAnime;
-  List<AnimeCollection> get continueWatching =>
-      _continueWatching.where((a) => !_hiddenSlugs.contains(a.slug)).toList();
+  bool get isHiddenTabSelected => _selectedGenre == hiddenGenreName;
+
+  List<AnimeCollection> get continueWatching {
+    if (isHiddenTabSelected) {
+      return _continueWatching.where((a) => _hiddenSlugs.contains(a.slug)).toList();
+    }
+    return _continueWatching.where((a) => !_hiddenSlugs.contains(a.slug)).toList();
+  }
+
   String get selectedGenre => _selectedGenre;
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
@@ -59,24 +68,48 @@ class AnimeCatalogProvider extends ChangeNotifier {
   Future<void> unhideAnime(String slug) async {
     _hiddenSlugs.remove(slug);
     await _prefs.setStringList(_prefHiddenSlugsKey, _hiddenSlugs.toList());
+    if (_hiddenSlugs.isEmpty && _selectedGenre == hiddenGenreName) {
+      _selectedGenre = 'ทั้งหมด';
+    }
     notifyListeners();
   }
 
   Future<void> unhideAll() async {
     _hiddenSlugs.clear();
     await _prefs.remove(_prefHiddenSlugsKey);
+    if (_selectedGenre == hiddenGenreName) {
+      _selectedGenre = 'ทั้งหมด';
+    }
     notifyListeners();
   }
 
+  void selectHiddenTab() {
+    setSelectedGenre(hiddenGenreName);
+  }
+
   List<String> get availableGenres {
-    final set = <String>{'ทั้งหมด'};
-    for (final a in _allAnime.where((a) => !_hiddenSlugs.contains(a.slug))) {
-      set.addAll(a.genres);
+    final list = <String>['ทั้งหมด'];
+    if (_hiddenSlugs.isNotEmpty) {
+      list.add(hiddenGenreName);
     }
-    return set.toList();
+    final genreSet = <String>{};
+    for (final a in _allAnime.where((a) => !_hiddenSlugs.contains(a.slug))) {
+      genreSet.addAll(a.genres);
+    }
+    list.addAll(genreSet);
+    return list;
   }
 
   List<AnimeCollection> get filteredAnime {
+    if (isHiddenTabSelected) {
+      return _allAnime.where((anime) {
+        if (!_hiddenSlugs.contains(anime.slug)) return false;
+        final matchesSearch = _searchQuery.isEmpty ||
+            anime.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            (anime.synopsis?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+        return matchesSearch;
+      }).toList();
+    }
     return _allAnime.where((anime) {
       if (_hiddenSlugs.contains(anime.slug)) return false;
       final matchesGenre = _selectedGenre == 'ทั้งหมด' || anime.genres.contains(_selectedGenre);

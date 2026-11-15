@@ -12,6 +12,7 @@ import android.content.res.Configuration
 import android.graphics.drawable.Icon
 import android.media.AudioManager
 import android.os.Build
+import android.os.StatFs
 import android.provider.Settings
 import android.util.Rational
 import android.net.Uri
@@ -27,6 +28,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.animeview.anime_view/pip"
         private const val UPDATER_CHANNEL = "com.animeview.anime_view/updater"
         private const val CAST_CHANNEL = "com.animeview.anime_view/cast"
+        private const val STORAGE_CHANNEL = "com.animeview.anime_view/storage"
         private const val ACTION_MEDIA_CONTROL = "com.animeview.anime_view.MEDIA_CONTROL"
         private const val EXTRA_CONTROL_TYPE = "control_type"
         private const val CONTROL_TYPE_PLAY = 1
@@ -260,6 +262,39 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("INSTALL_ERROR", e.localizedMessage, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Storage channel
+        val storageChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, STORAGE_CHANNEL)
+        storageChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getStorageSpace" -> {
+                    try {
+                        val path = applicationContext.filesDir
+                        val stat = StatFs(path.path)
+                        val freeBytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                            stat.availableBytes
+                        } else {
+                            @Suppress("DEPRECATION")
+                            stat.availableBlocks.toLong() * stat.blockSize.toLong()
+                        }
+                        val totalBytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+                            stat.totalBytes
+                        } else {
+                            @Suppress("DEPRECATION")
+                            stat.blockCount.toLong() * stat.blockSize.toLong()
+                        }
+                        val data = mapOf(
+                            "freeBytes" to freeBytes,
+                            "totalBytes" to totalBytes
+                        )
+                        result.success(data)
+                    } catch (e: Exception) {
+                        result.error("STORAGE_ERROR", e.localizedMessage, null)
                     }
                 }
                 else -> result.notImplemented()

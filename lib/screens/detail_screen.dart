@@ -6,6 +6,7 @@ import '../models/isar_models.dart';
 import '../providers/anime_catalog_provider.dart';
 import '../providers/download_provider.dart';
 import '../screens/player_screen.dart';
+import '../screens/downloads_screen.dart';
 import '../widgets/anime_action_sheet.dart';
 import '../theme/app_theme.dart';
 
@@ -131,6 +132,32 @@ class DetailScreen extends StatelessWidget {
                         ),
                       );
                     }
+                  } else if (value == 'download_all') {
+                    final queued = await downloadProvider.downloadAllEpisodes(
+                      anime: currentAnime,
+                      serverUrl: provider.serverUrl,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(queued > 0
+                              ? 'เริ่มดาวน์โหลดทั้งหมด $queued ตอนแล้ว...'
+                              : 'ดาวน์โหลดครบทุกตอนแล้ว'),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Colors.green.shade800,
+                        ),
+                      );
+                    }
+                  } else if (value == 'cancel_downloads') {
+                    await downloadProvider.cancelAnimeDownloads(currentAnime.slug);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('ยกเลิกการดาวน์โหลดทั้งหมดของเรื่องนี้แล้ว'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   } else if (value == 'delete') {
                     AnimeActionSheet.showDeleteConfirmDialog(
                       context,
@@ -172,6 +199,35 @@ class DetailScreen extends StatelessWidget {
                             SizedBox(width: 10),
                             Text(
                               'ลบออกจากกำลังรับชมต่อ',
+                              style: TextStyle(color: AppTheme.textMain, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (downloadProvider.isAnimeDownloading(anime.slug)) ...[
+                      const PopupMenuItem(
+                        value: 'cancel_downloads',
+                        child: Row(
+                          children: [
+                            Icon(Icons.stop_circle_outlined, color: Colors.amber, size: 20),
+                            SizedBox(width: 10),
+                            Text(
+                              'ยกเลิกการดาวน์โหลดทั้งหมด',
+                              style: TextStyle(color: Colors.amber, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (!downloadProvider.isAnimeFullyDownloaded(currentAnime) && episodes.isNotEmpty) ...[
+                      const PopupMenuItem(
+                        value: 'download_all',
+                        child: Row(
+                          children: [
+                            Icon(Icons.download_for_offline_outlined, color: AppTheme.accent, size: 20),
+                            SizedBox(width: 10),
+                            Text(
+                              'ดาวน์โหลดทุกตอน',
                               style: TextStyle(color: AppTheme.textMain, fontSize: 14),
                             ),
                           ],
@@ -499,6 +555,151 @@ class DetailScreen extends StatelessWidget {
                           );
                         },
                       ),
+                    ] else if (episodes.length > 1) ...[
+                      const SizedBox(height: 10),
+                      Builder(
+                        builder: (context) {
+                          final isDownloading = downloadProvider.isAnimeDownloading(currentAnime.slug);
+                          final isAllCompleted = downloadProvider.isAnimeFullyDownloaded(currentAnime);
+                          final downloadedCount = downloadProvider.getDownloadedEpisodesCount(currentAnime);
+                          final remainingCount = episodes.length - downloadedCount;
+
+                          if (isDownloading) {
+                            final downloadingCount = downloadProvider.getDownloadingEpisodesCount(currentAnime.slug);
+                            return SizedBox(
+                              height: 44,
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () async {
+                                  await downloadProvider.cancelAnimeDownloads(currentAnime.slug);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('ยกเลิกการดาวน์โหลดทั้งหมดของเรื่องนี้แล้ว'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: AppTheme.accent.withOpacity(0.6)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.accent,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        'กำลังดาวน์โหลด ($downloadingCount ตอนในคิว) • แตะเพื่อยกเลิก',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13, color: AppTheme.accent, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          if (isAllCompleted) {
+                            return SizedBox(
+                              height: 44,
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Colors.green.withOpacity(0.4)),
+                                  backgroundColor: Colors.green.withOpacity(0.06),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.check_circle, size: 18, color: Colors.green),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        'ดาวน์โหลดครบทุกตอนแล้ว (${episodes.length} ตอน)',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          return SizedBox(
+                            height: 44,
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final count = await downloadProvider.downloadAllEpisodes(
+                                  anime: currentAnime,
+                                  serverUrl: provider.serverUrl,
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('เริ่มดาวน์โหลดทั้งหมด $count ตอนแล้ว...'),
+                                      duration: const Duration(seconds: 3),
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: Colors.green.shade800,
+                                      action: SnackBarAction(
+                                        label: 'ดูคิว',
+                                        textColor: Colors.white,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.05),
+                                side: const BorderSide(color: Colors.white24),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.download_for_offline_outlined, size: 18, color: Colors.white70),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      downloadedCount > 0
+                                          ? 'ดาวน์โหลดตอนที่เหลือทั้งหมด ($remainingCount ตอน)'
+                                          : 'ดาวน์โหลดออฟไลน์ทั้งหมดทุกตอน (${episodes.length} ตอน)',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ],
                   const SizedBox(height: 18),
@@ -560,9 +761,89 @@ class DetailScreen extends StatelessWidget {
                           color: AppTheme.textMain,
                         ),
                       ),
-                      Text(
-                        '${episodes.length} ตอน',
-                        style: const TextStyle(color: AppTheme.accent, fontSize: 13, fontWeight: FontWeight.w600),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (episodes.length > 1) ...[
+                            Builder(
+                              builder: (context) {
+                                final isAllCompleted = downloadProvider.isAnimeFullyDownloaded(currentAnime);
+                                final isDownloading = downloadProvider.isAnimeDownloading(currentAnime.slug);
+
+                                if (isDownloading) {
+                                  return TextButton.icon(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    icon: const SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.accent),
+                                    ),
+                                    label: const Text(
+                                      'กำลังโหลด...',
+                                      style: TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+                                      );
+                                    },
+                                  );
+                                }
+
+                                if (isAllCompleted) {
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    margin: const EdgeInsets.only(right: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Text(
+                                      'โหลดครบแล้ว',
+                                      style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.w600),
+                                    ),
+                                  );
+                                }
+
+                                return TextButton.icon(
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                  icon: const Icon(Icons.download_outlined, size: 15, color: AppTheme.accent),
+                                  label: const Text(
+                                    'โหลดทุกตอน',
+                                    style: TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () async {
+                                    final count = await downloadProvider.downloadAllEpisodes(
+                                      anime: currentAnime,
+                                      serverUrl: provider.serverUrl,
+                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('เริ่มดาวน์โหลดทั้งหมด $count ตอนแล้ว...'),
+                                          duration: const Duration(seconds: 3),
+                                          behavior: SnackBarBehavior.floating,
+                                          backgroundColor: Colors.green.shade800,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            '${episodes.length} ตอน',
+                            style: const TextStyle(color: AppTheme.textMuted, fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
                     ],
                   ),

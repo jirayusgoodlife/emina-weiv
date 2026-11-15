@@ -5,6 +5,7 @@ import '../models/isar_models.dart';
 import '../providers/anime_catalog_provider.dart';
 import '../providers/download_provider.dart';
 import '../screens/detail_screen.dart';
+import '../screens/downloads_screen.dart';
 import '../theme/app_theme.dart';
 
 class AnimeActionSheet {
@@ -288,6 +289,86 @@ class _AnimeActionSheetWidget extends StatelessWidget {
               },
             ),
 
+            // Option: Download All Episodes
+            Consumer<DownloadProvider>(
+              builder: (context, dlProv, _) {
+                final isDownloading = dlProv.isAnimeDownloading(anime.slug);
+                final isCompleted = dlProv.isAnimeFullyDownloaded(anime);
+                final downloadedCount = dlProv.getDownloadedEpisodesCount(anime);
+                final remainingCount = anime.episodes.length - downloadedCount;
+
+                String title;
+                String subtitle;
+                IconData icon;
+                Color color;
+
+                if (isDownloading) {
+                  final activeCount = dlProv.getDownloadingEpisodesCount(anime.slug);
+                  title = 'กำลังดาวน์โหลด... ($activeCount ตอนในคิว)';
+                  subtitle = 'แตะเพื่อยกเลิกการดาวน์โหลดทั้งหมดของเรื่องนี้';
+                  icon = Icons.stop_circle_outlined;
+                  color = Colors.amber;
+                } else if (isCompleted) {
+                  title = 'ดาวน์โหลดครบทุกตอนแล้ว (${anime.episodes.length} ตอน)';
+                  subtitle = 'แตะเพื่อเปิดหน้ารายการดาวน์โหลด';
+                  icon = Icons.check_circle_outline;
+                  color = Colors.green;
+                } else {
+                  title = 'ดาวน์โหลดออฟไลน์ทุกตอน ($remainingCount ตอน)';
+                  subtitle = 'ดาวน์โหลดตอนที่เหลือทั้งหมดเก็บไว้ดูออฟไลน์';
+                  icon = Icons.download_for_offline_outlined;
+                  color = AppTheme.accent;
+                }
+
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 22),
+                  ),
+                  title: Text(title, style: const TextStyle(color: AppTheme.textMain, fontSize: 14)),
+                  subtitle: Text(subtitle, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                  onTap: () async {
+                    Navigator.of(context).pop();
+                    if (isDownloading) {
+                      await dlProv.cancelAnimeDownloads(anime.slug);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('ยกเลิกการดาวน์โหลดเรื่อง "${anime.title}" แล้ว'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } else if (isCompleted) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+                      );
+                    } else {
+                      final queued = await dlProv.downloadAllEpisodes(
+                        anime: anime,
+                        serverUrl: provider.serverUrl,
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('เริ่มดาวน์โหลดเรื่อง "${anime.title}" ทั้งหมด $queued ตอนแล้ว'),
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: Colors.green.shade800,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                );
+              },
+            ),
+
             // Option 2: Hide / Unhide
             ListTile(
               dense: true,
@@ -518,6 +599,12 @@ class _HiddenAnimeListSheet extends StatelessWidget {
                     final item = hiddenList[index];
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => DetailScreen(anime: item)),
+                        );
+                      },
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: CachedNetworkImage(
@@ -539,12 +626,22 @@ class _HiddenAnimeListSheet extends StatelessWidget {
                         style: const TextStyle(color: AppTheme.textMain, fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
-                        '${item.episodes.length} ตอน • ${item.status ?? ""}',
-                        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                        '${item.episodes.length} ตอน • แตะเพื่อเปิดดู',
+                        style: const TextStyle(color: AppTheme.accent, fontSize: 11),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          IconButton(
+                            icon: const Icon(Icons.play_circle_outline, color: AppTheme.primary, size: 22),
+                            tooltip: 'เปิดดู',
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => DetailScreen(anime: item)),
+                              );
+                            },
+                          ),
                           IconButton(
                             icon: const Icon(Icons.visibility, color: Colors.greenAccent, size: 20),
                             tooltip: 'ยกเลิกการซ่อน',
