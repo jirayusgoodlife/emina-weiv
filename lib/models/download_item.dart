@@ -49,6 +49,11 @@ class DownloadItem {
   bool get isQueued => status == DownloadStatus.queued;
   bool get isFailed => status == DownloadStatus.failed;
 
+  /// An episode or movie is considered possibly incomplete if it was marked completed
+  /// but has a suspiciously small file size (< 35 MB) for typical anime video streams.
+  bool get isPossiblyIncomplete =>
+      isCompleted && fileSizeBytes > 0 && fileSizeBytes < 35 * 1024 * 1024;
+
   bool get isExpired {
     if (!isCompleted) return false;
     if (keepForever) return false;

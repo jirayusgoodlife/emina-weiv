@@ -296,6 +296,8 @@ class _AnimeActionSheetWidget extends StatelessWidget {
                 final isCompleted = dlProv.isAnimeFullyDownloaded(anime);
                 final downloadedCount = dlProv.getDownloadedEpisodesCount(anime);
                 final remainingCount = anime.episodes.length - downloadedCount;
+                final group = dlProv.animeGroups.where((g) => g.animeSlug == anime.slug).firstOrNull;
+                final hasIncomplete = group?.hasPossiblyIncomplete ?? false;
 
                 String title;
                 String subtitle;
@@ -309,10 +311,17 @@ class _AnimeActionSheetWidget extends StatelessWidget {
                   icon = Icons.stop_circle_outlined;
                   color = Colors.amber;
                 } else if (isCompleted) {
-                  title = 'ดาวน์โหลดครบทุกตอนแล้ว (${anime.episodes.length} ตอน)';
-                  subtitle = 'แตะเพื่อเปิดหน้ารายการดาวน์โหลด';
-                  icon = Icons.check_circle_outline;
-                  color = Colors.green;
+                  if (hasIncomplete) {
+                    title = 'ดาวน์โหลดแล้ว (พบ ${group!.possiblyIncompleteCount} ตอนที่อาจไม่ครบ)';
+                    subtitle = 'แตะเพื่อเปิดหน้าดาวน์โหลดและดาวน์โหลดใหม่';
+                    icon = Icons.warning_amber_rounded;
+                    color = Colors.amber;
+                  } else {
+                    title = 'ดาวน์โหลดครบทุกตอนแล้ว (${anime.episodes.length} ตอน)';
+                    subtitle = 'แตะเพื่อเปิดหน้ารายการดาวน์โหลด';
+                    icon = Icons.check_circle_outline;
+                    color = Colors.green;
+                  }
                 } else {
                   title = 'ดาวน์โหลดออฟไลน์ทุกตอน ($remainingCount ตอน)';
                   subtitle = 'ดาวน์โหลดตอนที่เหลือทั้งหมดเก็บไว้ดูออฟไลน์';

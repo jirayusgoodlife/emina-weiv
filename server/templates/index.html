@@ -828,15 +828,21 @@
           <div class="input-row">
             <input type="text" id="targetUrl" placeholder="วาง URL เว็บดูหนังหรืออนิเมะ เช่น https://ani***.com/40235 หรือ https://moc.ukaw-emina/..." />
             <button id="extractBtn" class="btn btn-primary" onclick="startExtraction()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-              วิเคราะห์ด้วย AI
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              ดึงข้อมูลด่วน (Fast Mode)
             </button>
           </div>
-          <div style="margin-top: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <input type="checkbox" id="singleAutoSave" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary);" />
               <label for="singleAutoSave" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.9rem; color: var(--text);">
                 บันทึกเข้าแคตตาล็อกอัตโนมัติทันทีหลังวิเคราะห์เสร็จ (Auto Save)
+              </label>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="singleUseAi" style="width: 18px; height: 18px; cursor: pointer; accent-color: #8b5cf6;" onchange="updateExtractBtnState()" />
+              <label for="singleUseAi" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.88rem; color: #c4b5fd;">
+                🤖 ใช้ LLM สแกนข้อมูลหนัง (ปกติปิดไว้เพื่อดึงข้อมูลด่วนเสร็จใน 0.5 วินาที)
               </label>
             </div>
           </div>
@@ -865,11 +871,19 @@
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <input type="checkbox" id="batchAutoSave" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);" />
-              <label for="batchAutoSave" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.92rem; color: var(--text); font-weight: 600;">
-                บันทึกเข้าแคตตาล็อกอัตโนมัติทันทีในแต่ละเรื่อง (Auto Save ต่อเนื่อง)
-              </label>
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="batchAutoSave" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent);" />
+                <label for="batchAutoSave" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.92rem; color: var(--text); font-weight: 600;">
+                  บันทึกเข้าแคตตาล็อกอัตโนมัติทันทีในแต่ละเรื่อง (Auto Save ต่อเนื่อง)
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="batchUseAi" style="width: 18px; height: 18px; cursor: pointer; accent-color: #8b5cf6;" />
+                <label for="batchUseAi" style="margin: 0; cursor: pointer; text-transform: none; font-size: 0.88rem; color: #c4b5fd;">
+                  🤖 ใช้ LLM ช่วยสแกนคิว (ปกติปิดไว้เพื่อความเร็วสูงสุด)
+                </label>
+              </div>
             </div>
 
             <div style="display: flex; gap: 10px;">
@@ -1877,10 +1891,11 @@
 
         try {
           // 1. Call /api/extract
+          const batchAi = document.getElementById('batchUseAi') ? document.getElementById('batchUseAi').checked : false;
           const res = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: item.url, use_ai: true })
+            body: JSON.stringify({ url: item.url, use_ai: batchAi })
           });
 
           if (!res.ok) {
@@ -1956,6 +1971,17 @@
       box.scrollTop = box.scrollHeight;
     }
 
+    function updateExtractBtnState() {
+      const btn = document.getElementById('extractBtn');
+      if (!btn) return;
+      const useAi = document.getElementById('singleUseAi') && document.getElementById('singleUseAi').checked;
+      if (useAi) {
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> วิเคราะห์ด้วย AI`;
+      } else {
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> ดึงข้อมูลด่วน (Fast Mode)`;
+      }
+    }
+
     // AI Extraction (Single URL)
     async function startExtraction() {
       const url = document.getElementById('targetUrl').value.trim();
@@ -1964,16 +1990,19 @@
         return;
       }
 
+      const useAi = document.getElementById('singleUseAi') && document.getElementById('singleUseAi').checked;
       const btn = document.getElementById('extractBtn');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> กำลังดึงและวิเคราะห์ด้วย AI...';
+      btn.innerHTML = useAi
+        ? '<span class="spinner"></span> กำลังดึงและวิเคราะห์ด้วย AI...'
+        : '<span class="spinner"></span> กำลังดึงข้อมูลด่วน...';
 
       const thinkingCard = document.getElementById('aiThinkingCard');
       const thinkingBox = document.getElementById('aiThinkingBox');
       if (thinkingCard) thinkingCard.style.display = 'block';
       if (thinkingBox) thinkingBox.textContent = '';
 
-      appendThinkingLog(`🚀 เริ่มต้นดึงข้อมูลจาก: ${url}`);
+      appendThinkingLog(`🚀 เริ่มต้นดึงข้อมูลจาก: ${url} (${useAi ? 'โหมด AI สแกนละเอียด' : 'โหมด Fast Rule-based เร็วพิเศษ'})`);
 
       let finalResult = null;
 
@@ -1981,7 +2010,7 @@
         const response = await fetch('/api/extract_stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: url, use_ai: true })
+          body: JSON.stringify({ url: url, use_ai: useAi })
         });
 
         if (!response.ok) {
@@ -2044,7 +2073,7 @@
         appendThinkingLog(`⚠️ ดึงข้อมูลไม่สำเร็จ: ${e.message}`);
       } finally {
         btn.disabled = false;
-        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> วิเคราะห์ด้วย AI`;
+        updateExtractBtnState();
       }
     }
 

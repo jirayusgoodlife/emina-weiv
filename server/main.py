@@ -66,7 +66,7 @@ def get_local_ips() -> List[str]:
 
 class ExtractRequest(BaseModel):
     url: str
-    use_ai: bool = True
+    use_ai: bool = False
 
 class UpdateEpisodesRequest(BaseModel):
     source_url: Optional[str] = None

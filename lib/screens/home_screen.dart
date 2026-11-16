@@ -16,6 +16,7 @@ import '../providers/settings_provider.dart';
 import '../widgets/anime_action_sheet.dart';
 import '../widgets/settings_sheet.dart';
 import '../services/update_service.dart';
+import '../services/download_background_service.dart';
 import '../widgets/update_dialog.dart';
 import '../widgets/cast_button.dart';
 import '../theme/app_theme.dart';
@@ -33,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUpdateOnLaunch();
+      DownloadBackgroundService.requestNotificationPermission();
     });
   }
 
@@ -104,12 +106,29 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final provider = Provider.of<AnimeCatalogProvider>(context);
     final settings = Provider.of<SettingsProvider>(context);
+    final downloadProvider = Provider.of<DownloadProvider>(context);
     final allAnime = provider.filteredAnime;
     final continueWatching = provider.continueWatching;
     final heroAnime = provider.allAnime.isNotEmpty ? provider.allAnime.first : null;
+    final hasActiveDownloads = downloadProvider.activeDownloadingEpisodeIds.isNotEmpty ||
+        downloadProvider.queuedDownloads.isNotEmpty;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
+    return PopScope(
+      canPop: !hasActiveDownloads,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        // Keep downloading in background mode: minimize app without killing process
+        DownloadBackgroundService.minimizeApp();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('กำลังดาวน์โหลดต่อในพื้นหลัง... ล็อกหน้าจอหรือเปิดแอปอื่นได้ตามปกติ'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.background,
       appBar: AppBar(
         leading: Builder(
           builder: (scaffoldCtx) => Stack(
@@ -404,6 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+      ),
     );
   }
 

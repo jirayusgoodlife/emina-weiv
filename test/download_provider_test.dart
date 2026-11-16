@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -306,17 +307,17 @@ void main() {
         ..id = 'naruto-1'
         ..title = 'ตอนที่ 1'
         ..episodeNumber = 1.0
-        ..streamUrl = '';
+        ..streamUrl = 'http://127.0.0.1:9999/naruto-1.m3u8';
       final ep2 = EpisodeEmbedded()
         ..id = 'naruto-2'
         ..title = 'ตอนที่ 2'
         ..episodeNumber = 2.0
-        ..streamUrl = '';
+        ..streamUrl = 'http://127.0.0.1:9999/naruto-2.m3u8';
       final ep3 = EpisodeEmbedded()
         ..id = 'naruto-3'
         ..title = 'ตอนที่ 3'
         ..episodeNumber = 3.0
-        ..streamUrl = '';
+        ..streamUrl = 'http://127.0.0.1:9999/naruto-3.m3u8';
 
       anime.episodes = [ep1, ep2, ep3];
 
@@ -328,6 +329,256 @@ void main() {
       // Cancel all downloads
       await provider.cancelAnimeDownloads('naruto');
       expect(provider.isAnimeDownloading('naruto'), isFalse);
+    });
+
+    test('retryAllFailedDownloads and retryFailedDownloadsForAnime re-enqueue failed downloads', () async {
+      final anime = AnimeCollection()
+        ..slug = 'bleach-failed'
+        ..title = 'Bleach Failed';
+
+      final ep1 = EpisodeEmbedded()
+        ..id = 'bf-1'
+        ..title = 'ตอนที่ 1'
+        ..episodeNumber = 1.0
+        ..streamUrl = '';
+      final ep2 = EpisodeEmbedded()
+        ..id = 'bf-2'
+        ..title = 'ตอนที่ 2'
+        ..episodeNumber = 2.0
+        ..streamUrl = '';
+
+      anime.episodes = [ep1, ep2];
+      await provider.startDownload(anime: anime, episode: ep1);
+      await provider.startDownload(anime: anime, episode: ep2);
+
+      expect(provider.failedDownloads.length, 2);
+
+      // Retry all
+      final retried = await provider.retryAllFailedDownloads(availableAnime: [anime]);
+      expect(retried, 2);
+    });
+
+    test('setMaxConcurrentDownloads updates limit and persists in SharedPreferences', () async {
+      expect(provider.maxConcurrentDownloads, DownloadProvider.defaultMaxConcurrentDownloads);
+      await provider.setMaxConcurrentDownloads(4);
+      expect(provider.maxConcurrentDownloads, 4);
+
+      // Clamped to 1-5
+      await provider.setMaxConcurrentDownloads(10);
+      expect(provider.maxConcurrentDownloads, 5);
+      await provider.setMaxConcurrentDownloads(0);
+      expect(provider.maxConcurrentDownloads, 1);
+    });
+
+    test('isPossiblyIncomplete identifies files under 35MB', () {
+      final normalItem = DownloadItem(
+        episodeId: 'norm-1',
+        animeSlug: 'test',
+        animeTitle: 'Test Anime',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 1',
+        episodeNumber: 1.0,
+        streamUrl: 'http://example.com/1.m3u8',
+        localFilePath: '/tmp/test1.mp4',
+        fileSizeBytes: 150 * 1024 * 1024, // 150 MB
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      final smallItem = DownloadItem(
+        episodeId: 'small-1',
+        animeSlug: 'test',
+        animeTitle: 'Test Anime',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 2',
+        episodeNumber: 2.0,
+        streamUrl: 'http://example.com/2.m3u8',
+        localFilePath: '/tmp/test2.mp4',
+        fileSizeBytes: 25 * 1024 * 1024, // 25 MB (incomplete)
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      final incompleteFailedItem = DownloadItem(
+        episodeId: 'failed-1',
+        animeSlug: 'test',
+        animeTitle: 'Test Anime',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 3',
+        episodeNumber: 3.0,
+        streamUrl: 'http://example.com/3.m3u8',
+        localFilePath: '/tmp/test3.mp4',
+        fileSizeBytes: 25 * 1024 * 1024,
+        status: DownloadStatus.failed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      expect(normalItem.isPossiblyIncomplete, isFalse);
+      expect(smallItem.isPossiblyIncomplete, isTrue);
+      // Failed items are not considered "completed with small size"
+      expect(incompleteFailedItem.isPossiblyIncomplete, isFalse);
+
+      final group = DownloadedAnimeGroup(
+        animeSlug: 'test',
+        animeTitle: 'Test Anime',
+        animeCoverUrl: '',
+        episodes: [normalItem, smallItem],
+      );
+      expect(group.possiblyIncompleteCount, 1);
+      expect(group.hasPossiblyIncomplete, isTrue);
+    });
+
+    test('redownloadEpisode and redownloadPossiblyIncompleteDownloads re-download incomplete items', () async {
+      final anime = AnimeCollection()
+        ..slug = 'one-piece-redownload'
+        ..title = 'One Piece';
+
+      final ep1 = EpisodeEmbedded()
+        ..id = 'op-1'
+        ..title = 'ตอนที่ 1'
+        ..episodeNumber = 1.0
+        ..streamUrl = 'http://127.0.0.1:9999/op-1.m3u8';
+      final ep2 = EpisodeEmbedded()
+        ..id = 'op-2'
+        ..title = 'ตอนที่ 2'
+        ..episodeNumber = 2.0
+        ..streamUrl = 'http://127.0.0.1:9999/op-2.m3u8';
+
+      anime.episodes = [ep1, ep2];
+
+      final tempDir = Directory.systemTemp.createTempSync('op_test_');
+      final f1 = File('${tempDir.path}/op1.mp4')..writeAsBytesSync([1, 2, 3]);
+      final f2 = File('${tempDir.path}/op2.mp4')..writeAsBytesSync([1, 2, 3]);
+
+      // Simulate ep1 completed but only 25MB
+      final item1 = DownloadItem(
+        episodeId: 'op-1',
+        animeSlug: 'one-piece-redownload',
+        animeTitle: 'One Piece',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 1',
+        episodeNumber: 1.0,
+        streamUrl: 'http://127.0.0.1:9999/op-1.m3u8',
+        localFilePath: f1.path,
+        fileSizeBytes: 25 * 1024 * 1024,
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      // Simulate ep2 completed normally (200MB)
+      final item2 = DownloadItem(
+        episodeId: 'op-2',
+        animeSlug: 'one-piece-redownload',
+        animeTitle: 'One Piece',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 2',
+        episodeNumber: 2.0,
+        streamUrl: 'http://127.0.0.1:9999/op-2.m3u8',
+        localFilePath: f2.path,
+        fileSizeBytes: 200 * 1024 * 1024,
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      // Inject items into SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'pref_downloaded_episodes_v1',
+        jsonEncode([item1.toJson(), item2.toJson()]),
+      );
+
+      // Create new provider loading this state
+      final newProv = DownloadProvider(prefs: prefs);
+      expect(newProv.isPossiblyIncomplete(newProv.getDownload('op-1')!), isTrue);
+      expect(newProv.isPossiblyIncomplete(newProv.getDownload('op-2')!), isFalse);
+      expect(newProv.possiblyIncompleteDownloads.length, 1);
+
+      // Redownload incomplete files
+      final retriedCount = await newProv.redownloadPossiblyIncompleteDownloads(availableAnime: [anime]);
+      expect(retriedCount, 1);
+
+      // Verify op-1 was re-downloaded (status changed from completed to failed because dummy URL, proving download attempted)
+      expect(newProv.getDownload('op-1')?.status, DownloadStatus.failed);
+      // op-2 was not incomplete, so it remains completed
+      expect(newProv.getDownload('op-2')?.status, DownloadStatus.completed);
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('redownloadAnime re-downloads all episodes of that anime', () async {
+      final anime = AnimeCollection()
+        ..slug = 'naruto-re'
+        ..title = 'Naruto Re';
+
+      final ep1 = EpisodeEmbedded()
+        ..id = 'nre-1'
+        ..title = 'ตอนที่ 1'
+        ..episodeNumber = 1.0
+        ..streamUrl = 'http://127.0.0.1:9999/nre-1.m3u8';
+      final ep2 = EpisodeEmbedded()
+        ..id = 'nre-2'
+        ..title = 'ตอนที่ 2'
+        ..episodeNumber = 2.0
+        ..streamUrl = 'http://127.0.0.1:9999/nre-2.m3u8';
+
+      anime.episodes = [ep1, ep2];
+
+      final tempDir = Directory.systemTemp.createTempSync('nre_test_');
+      final f1 = File('${tempDir.path}/nre1.mp4')..writeAsBytesSync([1, 2, 3]);
+      final f2 = File('${tempDir.path}/nre2.mp4')..writeAsBytesSync([1, 2, 3]);
+
+      final prefs = await SharedPreferences.getInstance();
+      final item1 = DownloadItem(
+        episodeId: 'nre-1',
+        animeSlug: 'naruto-re',
+        animeTitle: 'Naruto Re',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 1',
+        episodeNumber: 1.0,
+        streamUrl: 'http://127.0.0.1:9999/nre-1.m3u8',
+        localFilePath: f1.path,
+        fileSizeBytes: 25 * 1024 * 1024,
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+      final item2 = DownloadItem(
+        episodeId: 'nre-2',
+        animeSlug: 'naruto-re',
+        animeTitle: 'Naruto Re',
+        animeCoverUrl: '',
+        episodeTitle: 'ตอนที่ 2',
+        episodeNumber: 2.0,
+        streamUrl: 'http://127.0.0.1:9999/nre-2.m3u8',
+        localFilePath: f2.path,
+        fileSizeBytes: 200 * 1024 * 1024,
+        status: DownloadStatus.completed,
+        downloadedAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(days: 7)),
+      );
+
+      await prefs.setString(
+        'pref_downloaded_episodes_v1',
+        jsonEncode([item1.toJson(), item2.toJson()]),
+      );
+
+      final prov = DownloadProvider(prefs: prefs);
+      final redownloadCount = await prov.redownloadAnime('naruto-re', anime: anime);
+      expect(redownloadCount, 2);
+      // Both items were re-downloaded (status changed from completed to failed because dummy URL)
+      expect(prov.getDownload('nre-1')?.status, DownloadStatus.failed);
+      expect(prov.getDownload('nre-2')?.status, DownloadStatus.failed);
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
   });
 }

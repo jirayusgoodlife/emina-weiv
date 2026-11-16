@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/download_provider.dart';
 import '../services/update_service.dart';
 import 'update_dialog.dart';
 import '../theme/app_theme.dart';
@@ -70,6 +71,8 @@ class _AppSettingsSheet extends StatelessWidget {
             const NextEpisodeButtonSettingsSection(),
             const Divider(color: Colors.white10, height: 33),
             const AutoRotateSettingsSection(),
+            const Divider(color: Colors.white10, height: 33),
+            const DownloadSettingsSection(),
             const Divider(color: Colors.white10, height: 33),
             const _AppUpdateSection(),
             const SizedBox(height: 20),
@@ -230,6 +233,72 @@ class AutoRotateSettingsSection extends StatelessWidget {
             style: const TextStyle(color: Colors.white38, fontSize: 12),
           ),
           onChanged: (val) => settings.setAutoRotate(val),
+        ),
+      ],
+    );
+  }
+}
+
+/// ส่วนตั้งค่าย่อย: ความเร็วและจำนวนตอนที่ดาวน์โหลดพร้อมกัน
+class DownloadSettingsSection extends StatelessWidget {
+  const DownloadSettingsSection({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final dlProvider = Provider.of<DownloadProvider>(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.speed, color: AppTheme.accent, size: 18),
+            SizedBox(width: 8),
+            Text(
+              'การดาวน์โหลดออฟไลน์',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textMain,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'จำนวนตอนที่ดาวน์โหลดพร้อมกัน (เพิ่มขึ้นเพื่อดาวน์โหลดเร็วขึ้นเมื่อเน็ตเร็วหรือต่อ Wi-Fi):',
+          style: TextStyle(color: AppTheme.textMuted, fontSize: 12, height: 1.4),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [1, 2, 3, 4].map((count) {
+            final isSelected = dlProvider.maxConcurrentDownloads == count;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: ChoiceChip(
+                  label: Center(
+                    child: Text(
+                      '$count ตอน',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : AppTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                  selected: isSelected,
+                  selectedColor: AppTheme.primary,
+                  backgroundColor: AppTheme.cardLight,
+                  side: BorderSide(
+                    color: isSelected ? AppTheme.primary : Colors.white12,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  onSelected: (_) => dlProvider.setMaxConcurrentDownloads(count),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
     );

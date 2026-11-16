@@ -185,7 +185,7 @@ def parse_html_heuristics(html: str, base_url: str) -> Dict[str, Any]:
 async def extract_anime(
     url: str,
     settings: Dict[str, str],
-    use_ai: bool = True,
+    use_ai: bool = False,
     on_event: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
 ) -> Dict[str, Any]:
     if on_event:
@@ -484,6 +484,136 @@ Do NOT wrap in markdown code fences. Output valid JSON only."""
             await auto_resolve_episodes(eps)
             return heuristic_data
 
+async def resolve_stream_with_llm(
+    page_url: str,
+    html: str,
+    soup: BeautifulSoup,
+    client: httpx.AsyncClient,
+    settings: Optional[Dict[str, str]] = None
+) -> Optional[str]:
+    """Uses LLM as a specialized video stream & download structure deobfuscator.
+    Analyzes obfuscated JavaScript, player configuration objects (JWPlayer, VideoJS, DPlayer, Plyr),
+    iframes, and base64 payloads to extract direct .m3u8/.mp4 stream URLs."""
+    if not settings or not (settings.get("llm_provider") or settings.get("lmstudio_url") or settings.get("ollama_url")):
+        return None
+
+    try:
+        # 1. Collect candidate scripts focusing on player and stream keywords
+        script_candidates = []
+        keywords = ["m3u8", "mp4", "player", "sources", "file:", "eval(", "atob(", "hls", "jwplayer", "videojs", "dplayer", "plyr", "setup(", "playlist", "crypto", "base64", "token"]
+        for s in soup.find_all("script"):
+            text = s.get_text() or ""
+            src = s.get("src") or ""
+            text_lower = text.lower()
+            if any(k in text_lower for k in keywords):
+                snippet = text.strip()
+                if len(snippet) > 850:
+                    snippet = snippet[:850] + "... [truncated]"
+                script_candidates.append(snippet)
+            elif any(k in src.lower() for k in ["player", "embed", "video", "source", "stream"]):
+                script_candidates.append(f"<!-- External script src: {src} -->")
+
+        # 2. Collect candidate iframes and video tags
+        iframe_candidates = []
+        for f in soup.find_all("iframe"):
+            src = f.get("src") or f.get("data-src") or ""
+            if src and not src.startswith("javascript:"):
+                full_src = urllib.parse.urljoin(page_url, src)
+                iframe_candidates.append(full_src)
+
+        video_sources = []
+        for v in soup.find_all(["video", "source"]):
+            src = v.get("src") or v.get("data-src") or ""
+            if src:
+                full_src = urllib.parse.urljoin(page_url, src)
+                video_sources.append(full_src)
+
+        for v in video_sources:
+            if ".m3u8" in v or ".mp4" in v:
+                return v
+
+        # Minimal context
+        clone_soup = BeautifulSoup(html, "html.parser")
+        for tag in clone_soup(["style", "svg", "noscript", "nav", "footer", "header"]):
+            tag.decompose()
+        page_text = clone_soup.get_text(separator="\n", strip=True)[:1000]
+
+        script_payload = "\n---\n".join(script_candidates[:6]) if script_candidates else "No direct player script found."
+        iframe_payload = "\n".join(iframe_candidates[:5]) if iframe_candidates else "None"
+
+        llm_prompt = f"""You are an elite video streaming reverse-engineering expert. Your objective is to analyze the provided anime episode page HTML, obfuscated player scripts, and embed iframes to identify the DIRECT downloadable video stream URL (.m3u8 or .mp4) or the active video player embed URL.
+
+Episode Page URL: {page_url}
+
+Available Embed / Iframe Sources:
+{iframe_payload}
+
+Player & Obfuscated Script Snippets:
+{script_payload}
+
+Page Text Snippet:
+{page_text}
+
+Instructions:
+1. Examine scripts for HLS (.m3u8), MP4 links, base64 encoded strings, or player configurations (e.g., sources: [...], file: "...", jwplayer(...).setup, player_data = {{...}}).
+2. If an iframe points to a video player embed server (like streamtape, filemoon, dood, short, or custom player), identify its URL.
+3. Return STRICTLY a valid JSON object without markdown fences, with these exact keys:
+{{
+  "stream_url": "<DIRECT_M3U8_OR_MP4_OR_IFRAME_URL>",
+  "type": "m3u8" | "mp4" | "iframe",
+  "confidence": "high" | "medium" | "low"
+}}
+If no playable stream or player can be found, return {{"stream_url": null}}."""
+
+        ans = await call_llm(llm_prompt, settings)
+        cleaned = clean_json_text(ans)
+
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            m = re.search(r'"stream_url"\s*:\s*"([^"]+)"', ans)
+            if m and m.group(1).lower() != "null":
+                parsed = {"stream_url": m.group(1)}
+            else:
+                m_url = re.search(r"https?://[^\s\"<>']+", ans)
+                if m_url:
+                    parsed = {"stream_url": m_url.group(0)}
+
+        if parsed and parsed.get("stream_url"):
+            stream_url = parsed["stream_url"].strip()
+            if stream_url and stream_url.lower() not in ("null", "none"):
+                # If direct stream found
+                if ".m3u8" in stream_url or ".mp4" in stream_url:
+                    print(f"[LLMStreamResolver] Successfully extracted direct stream: {stream_url}")
+                    return stream_url
+
+                # If LLM returned an embed/iframe player URL, attempt to inspect it
+                try:
+                    parsed_sub = urllib.parse.urlparse(stream_url)
+                    sub_origin = f"{parsed_sub.scheme}://{parsed_sub.netloc}"
+                    sub_res = await client.get(
+                        stream_url,
+                        headers={"Referer": page_url, "Origin": sub_origin},
+                        timeout=12.0
+                    )
+                    if sub_res.status_code == 200:
+                        sub_text = sub_res.text
+                        m_direct = re.search(r'https?://[^\s"\'<>]+\.(?:m3u8|mp4)[^\s"\'<>]*', sub_text)
+                        if m_direct:
+                            resolved = m_direct.group(0)
+                            print(f"[LLMStreamResolver] Extracted direct stream from embed: {resolved}")
+                            return resolved
+                except Exception as sub_err:
+                    print(f"[LLMStreamResolver] Embed follow failed for {stream_url}: {sub_err}")
+
+                return stream_url
+
+    except Exception as e:
+        print(f"[LLMStreamResolver] Error during LLM stream resolution for {page_url}: {e}")
+
+    return None
+
 async def resolve_direct_stream(page_url: str, client: Optional[httpx.AsyncClient] = None, settings: Optional[Dict[str, str]] = None) -> Optional[str]:
     """Resolves direct stream URL using modular site handlers, Halim, DooPlay, Animenani, and generic video engines."""
     should_close_client = False
@@ -566,31 +696,10 @@ async def resolve_direct_stream(page_url: str, client: Optional[httpx.AsyncClien
         if res:
             return res
 
-        # 6. Optional AI Fallback
-        if settings and (settings.get("llm_provider") or settings.get("lmstudio_url") or settings.get("ollama_url")):
-            try:
-                for tag in soup(["style", "svg", "noscript"]):
-                    tag.decompose()
-                page_text = soup.get_text(separator="\n", strip=True)[:1500]
-                script_snippets = "\n".join([s.get_text()[:300] for s in soup.find_all("script") if s.get_text()][:5])
-                
-                llm_prompt = f"""Find the video stream or embed URL for this anime episode page.
-Episode URL: {page_url}
-Text snippet:
-{page_text}
-
-Script snippet:
-{script_snippets}
-
-Return ONLY the direct video stream URL (ending in .m3u8, .mp4) or the player iframe embed URL. If nothing found, return NONE."""
-                ans = await call_llm(llm_prompt, settings)
-                url_m = re.search(r"https?://[^\s\"<>]+", ans)
-                if url_m:
-                    found = url_m.group(0)
-                    if found != "NONE" and (".m3u8" in found or ".mp4" in found):
-                        return found
-            except Exception:
-                pass
+        # 10. AI-Assisted Deobfuscation Fallback for Download Stream
+        llm_res = await resolve_stream_with_llm(page_url, html, soup, client, settings=settings)
+        if llm_res:
+            return llm_res
 
     except Exception as e:
         print(f"[StreamResolver] Error resolving {page_url}: {e}")

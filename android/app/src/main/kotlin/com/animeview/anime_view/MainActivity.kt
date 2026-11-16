@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
         private const val UPDATER_CHANNEL = "com.animeview.anime_view/updater"
         private const val CAST_CHANNEL = "com.animeview.anime_view/cast"
         private const val STORAGE_CHANNEL = "com.animeview.anime_view/storage"
+        private const val DOWNLOAD_SERVICE_CHANNEL = "com.animeview.anime_view/download_service"
         private const val ACTION_MEDIA_CONTROL = "com.animeview.anime_view.MEDIA_CONTROL"
         private const val EXTRA_CONTROL_TYPE = "control_type"
         private const val CONTROL_TYPE_PLAY = 1
@@ -383,6 +384,49 @@ class MainActivity : FlutterActivity() {
                 }
                 "getConnectedDeviceName" -> {
                     result.success(castService?.getConnectedDeviceName() ?: "")
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // Download Foreground Service channel
+        val downloadChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_SERVICE_CHANNEL)
+        downloadChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startService" -> {
+                    val title = call.argument<String>("title") ?: "กำลังดาวน์โหลดอนิเมะ"
+                    val message = call.argument<String>("message") ?: "กำลังดาวน์โหลด..."
+                    val progress = call.argument<Int>("progress") ?: 0
+                    val max = call.argument<Int>("max") ?: 100
+                    DownloadForegroundService.start(this, title, message, progress, max)
+                    result.success(true)
+                }
+                "updateProgress" -> {
+                    val title = call.argument<String>("title") ?: "กำลังดาวน์โหลดอนิเมะ"
+                    val message = call.argument<String>("message") ?: "กำลังดาวน์โหลด..."
+                    val progress = call.argument<Int>("progress") ?: 0
+                    val max = call.argument<Int>("max") ?: 100
+                    DownloadForegroundService.update(this, title, message, progress, max)
+                    result.success(true)
+                }
+                "stopService" -> {
+                    val summary = call.argument<String>("summary")
+                    DownloadForegroundService.stop(this, summary)
+                    result.success(true)
+                }
+                "minimizeApp" -> {
+                    moveTaskToBack(true)
+                    result.success(true)
+                }
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 999)
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                    }
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }

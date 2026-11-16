@@ -40,12 +40,23 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
       appBar: AppBar(
         title: const Text('ดาวน์โหลดออฟไลน์'),
         actions: [
-          if (failed.isNotEmpty)
+          if (failed.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: Colors.orangeAccent),
+              tooltip: 'ดาวน์โหลดซ้ำที่ล้มเหลวใหม่ทั้งหมด (${failed.length} ตอน)',
+              onPressed: () => _retryAllFailed(context, downloadProvider),
+            ),
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined, color: Colors.redAccent),
               tooltip: 'ลบรายการที่ดาวน์โหลดไม่สำเร็จทั้งหมด',
               onPressed: () => _confirmDeleteAllFailed(context, downloadProvider),
             ),
+          ],
+          IconButton(
+            icon: const Icon(Icons.speed, color: AppTheme.accent),
+            tooltip: 'ความเร็วและการดาวน์โหลดพร้อมกัน (${downloadProvider.maxConcurrentDownloads} ตอน)',
+            onPressed: () => _showConcurrencySettingsSheet(context, downloadProvider),
+          ),
           if (completed.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.cleaning_services_outlined, color: AppTheme.accent),
@@ -148,9 +159,44 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    'ใช้พื้นที่ในแอป • ${groups.length} เรื่อง • $totalDownloadsCount ตอน',
-                                    style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'ใช้พื้นที่ในแอป • ${groups.length} เรื่อง • $totalDownloadsCount ตอน',
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () => _showConcurrencySettingsSheet(context, downloadProvider),
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.accent.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.bolt, size: 12, color: AppTheme.accent),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                'โหลดพร้อมกัน: ${downloadProvider.maxConcurrentDownloads} ตอน',
+                                                style: const TextStyle(
+                                                  color: AppTheme.accent,
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -218,6 +264,132 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                     ),
                   ),
                 ),
+
+                // Failed Downloads Banner with Retry All Action
+                if (failed.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.redAccent.withOpacity(0.35)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withOpacity(0.18),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.error_outline, color: Colors.redAccent, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'ดาวน์โหลดไม่สำเร็จ ${failed.length} ตอน',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'แตะปุ่มเพื่อดาวน์โหลดซ้ำใหม่ทั้งหมด',
+                                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () => _retryAllFailed(context, downloadProvider),
+                            icon: const Icon(Icons.replay, size: 15),
+                            label: const Text(
+                              'ดาวน์โหลดซ้ำทั้งหมด',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade800,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Incomplete / Small Downloads Warning Banner (< 35MB)
+                if (downloadProvider.possiblyIncompleteDownloads.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'พบ ${downloadProvider.possiblyIncompleteDownloads.length} ตอนที่ไฟล์อาจไม่ครบ',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'ขนาดไฟล์น้อยกว่า 35MB อาจโหลดค้าง/ไม่เต็มเรื่อง',
+                                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () => _redownloadAllIncomplete(context, downloadProvider),
+                            icon: const Icon(Icons.refresh, size: 15),
+                            label: const Text(
+                              'โหลดใหม่ทั้งหมด',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber.shade800,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // Grouped Anime Header
                 SliverToBoxAdapter(
@@ -445,6 +617,204 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
+  Future<void> _retryAllFailed(BuildContext context, DownloadProvider provider) async {
+    final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+    final count = await provider.retryAllFailedDownloads(
+      availableAnime: catalog.allAnime,
+      serverUrl: catalog.serverUrl,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(count > 0
+              ? 'เริ่มดาวน์โหลดซ้ำ $count ตอนที่ล้มเหลวใหม่แล้ว...'
+              : 'ไม่มีรายการที่ล้มเหลว'),
+          backgroundColor: count > 0 ? Colors.green.shade800 : Colors.grey.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _redownloadAllIncomplete(BuildContext context, DownloadProvider provider) async {
+    final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+    final count = await provider.redownloadPossiblyIncompleteDownloads(
+      availableAnime: catalog.allAnime,
+      serverUrl: catalog.serverUrl,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(count > 0
+              ? 'เริ่มดาวน์โหลดใหม่ $count ตอนที่อาจไม่สมบูรณ์แล้ว...'
+              : 'ไม่พบรายการที่ขนาดไฟล์ผิดปกติ'),
+          backgroundColor: count > 0 ? Colors.green.shade800 : Colors.grey.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _showConcurrencySettingsSheet(BuildContext context, DownloadProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          decoration: const BoxDecoration(
+            color: Color(0xFF141824),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.speed, color: AppTheme.accent, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'ความเร็วและการโหลดพร้อมกัน',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'เลือกจำนวนตอนที่ต้องการดาวน์โหลดพร้อมกัน หากอินเทอร์เน็ตความเร็วสูงหรือต่อ Wi-Fi สามารถเพิ่มเป็น 3-4 ตอนเพื่อให้โหลดเสร็จไวขึ้น',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12.5, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                ...[
+                  {
+                    'count': 1,
+                    'title': '1 ตอนพร้อมกัน',
+                    'subtitle': 'ประหยัดแบนด์วิดท์ เหมาะสำหรับเน็ตความเร็วจำกัด',
+                    'badge': 'เน็ตช้า',
+                    'badgeColor': Colors.grey,
+                  },
+                  {
+                    'count': 2,
+                    'title': '2 ตอนพร้อมกัน',
+                    'subtitle': 'สมดุลความเร็วและเสถียรภาพ',
+                    'badge': 'มาตรฐาน',
+                    'badgeColor': Colors.blueAccent,
+                  },
+                  {
+                    'count': 3,
+                    'title': '3 ตอนพร้อมกัน',
+                    'subtitle': 'โหลดเร็วขึ้นอย่างเห็นได้ชัด เหมาะสำหรับ Wi-Fi ทั่วไป',
+                    'badge': 'แนะนำ',
+                    'badgeColor': AppTheme.accent,
+                  },
+                  {
+                    'count': 4,
+                    'title': '4 ตอนพร้อมกัน',
+                    'subtitle': 'เต็มสปีด สำหรับเน็ตบ้านไฟเบอร์หรือเน็ตความเร็วสูงมาก',
+                    'badge': 'เร็วสุด',
+                    'badgeColor': Colors.greenAccent,
+                  },
+                ].map((opt) {
+                  final count = opt['count'] as int;
+                  final isSelected = provider.maxConcurrentDownloads == count;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.accent.withOpacity(0.1) : AppTheme.cardLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? AppTheme.accent : Colors.white10,
+                        width: isSelected ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: ListTile(
+                      dense: true,
+                      title: Row(
+                        children: [
+                          Text(
+                            opt['title'] as String,
+                            style: TextStyle(
+                              color: isSelected ? AppTheme.accent : Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: (opt['badgeColor'] as Color).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              opt['badge'] as String,
+                              style: TextStyle(
+                                color: opt['badgeColor'] as Color,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Text(
+                        opt['subtitle'] as String,
+                        style: const TextStyle(color: AppTheme.textMuted, fontSize: 11.5),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check_circle, color: AppTheme.accent, size: 20)
+                          : null,
+                      onTap: () {
+                        provider.setMaxConcurrentDownloads(count);
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _confirmDeleteAllFailed(BuildContext context, DownloadProvider provider) {
     final count = provider.failedDownloads.length;
     showDialog(
@@ -598,6 +968,34 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(group.animeTitle),
         actions: [
+          if (group.failedCount > 0)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: Colors.orangeAccent),
+              tooltip: 'ดาวน์โหลดตอนที่ล้มเหลวซ้ำ (${group.failedCount} ตอน)',
+              onPressed: () async {
+                final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+                final count = await provider.retryFailedDownloadsForAnime(
+                  group.animeSlug,
+                  anime: realAnime,
+                  serverUrl: catalog.serverUrl,
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('กำลังดาวน์โหลดซ้ำ $count ตอนที่ล้มเหลว...'),
+                      backgroundColor: Colors.green.shade800,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: AppTheme.accent),
+            tooltip: 'ดาวน์โหลดใหม่ทุกตอน',
+            onPressed: () => _confirmRedownloadAnime(context, group, provider),
+          ),
           IconButton(
             icon: const Icon(Icons.more_time, color: AppTheme.accent),
             tooltip: 'ตั้งเวลาจัดเก็บทั้งเรื่อง',
@@ -741,6 +1139,131 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
               ),
             ),
           ),
+
+          // Failed Episodes Warning Banner
+          if (group.failedCount > 0)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.35)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'มี ${group.failedCount} ตอนที่ดาวน์โหลดไม่สำเร็จ',
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                        final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+                        final count = await provider.retryFailedDownloadsForAnime(
+                          group.animeSlug,
+                          anime: realAnime,
+                          serverUrl: catalog.serverUrl,
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('กำลังดาวน์โหลดซ้ำ $count ตอนที่ล้มเหลว...'),
+                              backgroundColor: Colors.green.shade800,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.replay, size: 14),
+                      label: const Text('ดาวน์โหลดซ้ำ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade800,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Possibly Incomplete Warning Banner for this anime
+          if (group.hasPossiblyIncomplete)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'พบ ${group.possiblyIncompleteCount} ตอนที่ไฟล์อาจไม่ครบ (< 35MB)',
+                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          const Text(
+                            'สามารถกดเพื่อดาวน์โหลดใหม่ทับไฟล์เดิมได้',
+                            style: TextStyle(color: Colors.white60, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                        final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+                        int reCount = 0;
+                        for (final ep in group.episodes.where((e) => e.isPossiblyIncomplete)) {
+                          final realEp = realAnime?.episodes.where((e) => e.id == ep.episodeId).firstOrNull;
+                          await provider.redownloadEpisode(
+                            ep.episodeId,
+                            anime: realAnime,
+                            episode: realEp,
+                            serverUrl: catalog.serverUrl,
+                          );
+                          reCount++;
+                        }
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('กำลังดาวน์โหลดใหม่ $reCount ตอนที่อาจไม่ครบ...'),
+                              backgroundColor: Colors.green.shade800,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.refresh, size: 14),
+                      label: const Text('โหลดใหม่', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber.shade800,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // Episodes List Header
           SliverToBoxAdapter(
@@ -902,8 +1425,34 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                     children: [
                       Text(
                         item.formattedFileSize,
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: item.isPossiblyIncomplete ? Colors.amber : AppTheme.textMuted,
+                          fontWeight: item.isPossiblyIncomplete ? FontWeight.bold : FontWeight.normal,
+                        ),
                       ),
+                      if (item.isPossiblyIncomplete) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 10, color: Colors.amber),
+                              SizedBox(width: 3),
+                              Text(
+                                'อาจไม่ครบ',
+                                style: TextStyle(fontSize: 10, color: Colors.amber, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
@@ -1003,6 +1552,25 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton.icon(
+                    onPressed: () => _confirmRedownloadEpisode(context, item, group, provider),
+                    icon: Icon(
+                      Icons.refresh,
+                      size: 16,
+                      color: item.isPossiblyIncomplete ? Colors.amber : AppTheme.accent,
+                    ),
+                    label: Text(
+                      item.isPossiblyIncomplete ? 'โหลดใหม่ (ไฟล์ไม่ครบ)' : 'โหลดใหม่',
+                      style: TextStyle(
+                        color: item.isPossiblyIncomplete ? Colors.amber : AppTheme.accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    ),
+                  ),
+                  TextButton.icon(
                     onPressed: () => _showEpisodeRetentionSheet(context, item, group, provider),
                     icon: Icon(
                       item.keepForever ? Icons.lock_outline : Icons.more_time,
@@ -1010,7 +1578,7 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                       color: item.keepForever ? Colors.tealAccent : AppTheme.accent,
                     ),
                     label: Text(
-                      item.keepForever ? 'ไม่ลบจนกว่าจะลบเอง (เปลี่ยน)' : 'ขยายเวลา / ไม่ลบเอง',
+                      item.keepForever ? 'เก็บถาวร' : 'ขยายเวลา',
                       style: TextStyle(
                         color: item.keepForever ? Colors.tealAccent : AppTheme.accent,
                         fontSize: 12,
@@ -1018,7 +1586,7 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                       ),
                     ),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     ),
                   ),
                   TextButton.icon(
@@ -1029,7 +1597,7 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                       style: TextStyle(color: Colors.redAccent, fontSize: 12),
                     ),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     ),
                   ),
                 ],
@@ -1160,6 +1728,111 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             child: const Text('ลบออก', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRedownloadEpisode(
+    BuildContext context,
+    DownloadItem item,
+    DownloadedAnimeGroup group,
+    DownloadProvider provider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('ดาวน์โหลดตอนนี้ใหม่?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          item.isPossiblyIncomplete
+              ? 'ไฟล์ปัจจุบันมีขนาด ${item.formattedFileSize} ซึ่งอาจดาวน์โหลดไม่ครบเรื่อง ระบบจะลบไฟล์เก่าและเริ่มดาวน์โหลด "${item.episodeTitle}" ใหม่อีกครั้ง'
+              : 'คุณต้องการลบไฟล์เดิม (${item.formattedFileSize}) และดาวน์โหลด "${item.episodeTitle}" ใหม่อีกครั้งใช่หรือไม่?',
+          style: const TextStyle(color: AppTheme.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ยกเลิก', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+              final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+              final realEp = realAnime?.episodes.where((e) => e.id == item.episodeId).firstOrNull;
+              await provider.redownloadEpisode(
+                item.episodeId,
+                anime: realAnime,
+                episode: realEp,
+                serverUrl: catalog.serverUrl,
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('เริ่มดาวน์โหลดใหม่: ${item.episodeTitle}...'),
+                    backgroundColor: Colors.green.shade800,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('ดาวน์โหลดใหม่'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRedownloadAnime(
+    BuildContext context,
+    DownloadedAnimeGroup group,
+    DownloadProvider provider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('ดาวน์โหลดใหม่ทุกตอน?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'ระบบจะดาวน์โหลดทุกตอนของ "${group.animeTitle}" (${group.episodes.length} ตอน) ใหม่อีกครั้งอย่างสมบูรณ์',
+          style: const TextStyle(color: AppTheme.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ยกเลิก', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+              final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+              final count = await provider.redownloadAnime(
+                group.animeSlug,
+                anime: realAnime,
+                serverUrl: catalog.serverUrl,
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('เริ่มดาวน์โหลดใหม่ทั้งหมด $count ตอนแล้ว...'),
+                    backgroundColor: Colors.green.shade800,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('ดาวน์โหลดใหม่'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
           ),
         ],
       ),

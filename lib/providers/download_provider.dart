@@ -9,6 +9,7 @@ import '../models/download_item.dart';
 import '../models/isar_models.dart';
 import '../services/in_app_stream_proxy.dart';
 import '../services/storage_service.dart';
+import '../services/download_background_service.dart';
 
 class DownloadedAnimeGroup {
   final String animeSlug;
@@ -31,6 +32,9 @@ class DownloadedAnimeGroup {
   int get keepForeverCount => episodes.where((e) => e.keepForever).length;
   bool get allKeepForever => episodes.isNotEmpty && episodes.every((e) => e.keepForever);
   bool get anyKeepForever => episodes.any((e) => e.keepForever);
+
+  int get possiblyIncompleteCount => episodes.where((e) => e.isPossiblyIncomplete).length;
+  bool get hasPossiblyIncomplete => possiblyIncompleteCount > 0;
 
   String get formattedTotalSize {
     final bytes = totalBytes;
@@ -60,24 +64,44 @@ class DownloadProvider extends ChangeNotifier {
   final Map<String, DownloadItem> _downloads = {};
   final Set<String> _cancelledIds = {};
   final List<_QueuedDownloadRequest> _downloadQueue = [];
-  bool _isProcessingQueue = false;
-  String? _activeEpisodeId;
+  int _activeWorkersCount = 0;
+  final Set<String> _activeEpisodeIds = {};
+  int _maxConcurrentDownloads = defaultMaxConcurrentDownloads;
   Timer? _expirationTimer;
   DeviceStorageInfo? _deviceStorage;
 
   static const String _prefDownloadsKey = 'pref_downloaded_episodes_v1';
+  static const String _prefMaxConcurrentDownloadsKey = 'pref_max_concurrent_downloads';
+  static const int defaultMaxConcurrentDownloads = 3;
 
   static Map<String, String> _getCustomHeaders(String url) {
     return InAppStreamProxy.getCustomHeaders(url);
   }
 
   DownloadProvider({required SharedPreferences prefs}) : _prefs = prefs {
+    _maxConcurrentDownloads =
+        _prefs.getInt(_prefMaxConcurrentDownloadsKey) ?? defaultMaxConcurrentDownloads;
     _loadFromPrefs();
     refreshStorageSpace();
     // Periodically check and clean expired files every 15 minutes
     _expirationTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       checkAndCleanExpiredFiles();
     });
+  }
+
+  int get maxConcurrentDownloads => _maxConcurrentDownloads;
+  int get activeWorkersCount => _activeWorkersCount;
+  Set<String> get activeDownloadingEpisodeIds => _activeEpisodeIds;
+  String? get activeDownloadingEpisodeId =>
+      _activeEpisodeIds.isNotEmpty ? _activeEpisodeIds.first : null;
+
+  Future<void> setMaxConcurrentDownloads(int count) async {
+    final clamped = count.clamp(1, 5);
+    if (_maxConcurrentDownloads == clamped) return;
+    _maxConcurrentDownloads = clamped;
+    await _prefs.setInt(_prefMaxConcurrentDownloadsKey, clamped);
+    notifyListeners();
+    _processQueue();
   }
 
   DeviceStorageInfo? get deviceStorage => _deviceStorage;
@@ -102,8 +126,10 @@ class DownloadProvider extends ChangeNotifier {
       _downloads.values.where((d) => d.status == DownloadStatus.failed).toList();
   List<DownloadItem> get queuedDownloads =>
       _downloads.values.where((d) => d.status == DownloadStatus.queued).toList();
+  List<DownloadItem> get possiblyIncompleteDownloads =>
+      _downloads.values.where((d) => d.isPossiblyIncomplete).toList();
 
-  String? get activeDownloadingEpisodeId => _activeEpisodeId;
+  bool isPossiblyIncomplete(DownloadItem item) => item.isPossiblyIncomplete;
 
   /// Returns downloads grouped by Anime collection, with episodes sorted by storyline (episodeNumber ascending)
   List<DownloadedAnimeGroup> get animeGroups {
@@ -481,12 +507,16 @@ class DownloadProvider extends ChangeNotifier {
       _downloadQueue.remove(req);
     }
 
-    // 2. If active episode is from this anime, cancel it
-    if (_activeEpisodeId != null) {
-      final activeItem = _downloads[_activeEpisodeId];
+    // 2. If any active episode is from this anime, cancel it
+    final activeToCancel = <String>[];
+    for (final epId in _activeEpisodeIds) {
+      final activeItem = _downloads[epId];
       if (activeItem != null && activeItem.animeSlug == animeSlug) {
-        await cancelDownload(_activeEpisodeId!);
+        activeToCancel.add(epId);
       }
+    }
+    for (final epId in activeToCancel) {
+      await cancelDownload(epId);
     }
 
     // 3. Remove queued items for this anime from _downloads
@@ -496,13 +526,69 @@ class DownloadProvider extends ChangeNotifier {
     await _saveToPrefs();
     notifyListeners();
     refreshStorageSpace();
+    _syncBackgroundNotification(force: true);
   }
 
-  /// Background sequential queue processor
-  Future<void> _processQueue() async {
-    if (_isProcessingQueue) return;
-    _isProcessingQueue = true;
+  DateTime? _lastNotificationUpdateTime;
 
+  void _syncBackgroundNotification({bool force = false}) {
+    final activeCount = _activeEpisodeIds.length + _downloadQueue.length;
+    if (activeCount == 0) {
+      if (DownloadBackgroundService.isServiceRunning) {
+        DownloadBackgroundService.stopService(summary: 'การดาวน์โหลดทั้งหมดเสร็จสิ้นแล้ว');
+      }
+      return;
+    }
+
+    final now = DateTime.now();
+    if (!force &&
+        _lastNotificationUpdateTime != null &&
+        now.difference(_lastNotificationUpdateTime!).inMilliseconds < 1000) {
+      return;
+    }
+    _lastNotificationUpdateTime = now;
+
+    // Find active episode or first in queue
+    DownloadItem? activeItem;
+    for (final id in _activeEpisodeIds) {
+      activeItem = _downloads[id];
+      if (activeItem != null) break;
+    }
+
+    final animeTitle = activeItem?.animeTitle ?? 'อนิเมะ';
+    final title = 'กำลังดาวน์โหลด $animeTitle ($activeCount ตอนในคิว)';
+    final message = activeItem != null
+        ? '${activeItem.episodeTitle} (${(activeItem.progress * 100).toInt()}%)'
+        : 'กำลังเตรียมการดาวน์โหลด...';
+    final progress = activeItem != null ? (activeItem.progress * 100).toInt() : 0;
+
+    if (!DownloadBackgroundService.isServiceRunning) {
+      DownloadBackgroundService.startService(
+        title: title,
+        message: message,
+        progress: progress,
+        max: 100,
+      );
+    } else {
+      DownloadBackgroundService.updateProgress(
+        title: title,
+        message: message,
+        progress: progress,
+        max: 100,
+      );
+    }
+  }
+
+  /// Background concurrent queue processor
+  void _processQueue() {
+    _syncBackgroundNotification(force: true);
+    while (_activeWorkersCount < _maxConcurrentDownloads && _downloadQueue.isNotEmpty) {
+      _activeWorkersCount++;
+      _runQueueWorker();
+    }
+  }
+
+  Future<void> _runQueueWorker() async {
     try {
       while (_downloadQueue.isNotEmpty) {
         final req = _downloadQueue.removeAt(0);
@@ -512,28 +598,35 @@ class DownloadProvider extends ChangeNotifier {
           if (epId != null) _downloads.remove(epId);
           await _saveToPrefs();
           notifyListeners();
+          _syncBackgroundNotification();
           if (!req.completer.isCompleted) req.completer.complete();
           continue;
         }
 
-        _activeEpisodeId = epId;
+        _activeEpisodeIds.add(epId);
         final item = _downloads[epId];
         if (item != null) {
           item.status = DownloadStatus.downloading;
-          item.progress = 0.01;
+          item.progress = (item.progress > 0.01) ? item.progress : 0.01;
           notifyListeners();
+          _syncBackgroundNotification();
         }
 
         try {
           await _executeDownload(req.anime, req.episode, req.serverUrl);
         } catch (_) {}
 
-        _activeEpisodeId = null;
+        _activeEpisodeIds.remove(epId);
+        _syncBackgroundNotification();
         if (!req.completer.isCompleted) req.completer.complete();
       }
     } finally {
-      _isProcessingQueue = false;
-      _activeEpisodeId = null;
+      _activeWorkersCount--;
+      if (_downloadQueue.isNotEmpty && _activeWorkersCount < _maxConcurrentDownloads) {
+        _processQueue();
+      } else if (_activeWorkersCount == 0 && _downloadQueue.isEmpty) {
+        _syncBackgroundNotification(force: true);
+      }
     }
   }
 
@@ -644,6 +737,11 @@ class DownloadProvider extends ChangeNotifier {
       } else {
         downloadItem.status = DownloadStatus.failed;
         downloadItem.errorMessage = e.toString().replaceAll('Exception:', '').trim();
+        // Remove corrupted / incomplete file from disk so broken files don't linger around
+        try {
+          final f = File(localPath);
+          if (f.existsSync()) f.deleteSync();
+        } catch (_) {}
       }
     }
 
@@ -651,6 +749,7 @@ class DownloadProvider extends ChangeNotifier {
     await _saveToPrefs();
     notifyListeners();
     refreshStorageSpace();
+    _syncBackgroundNotification(force: true);
   }
 
   /// Multi-worker parallel segment downloader for HLS (like IDM)
@@ -763,7 +862,9 @@ class DownloadProvider extends ChangeNotifier {
       int nextDownloadIndex = 0;
       int nextWriteIndex = 0;
       int successfulSegments = 0;
-      const int maxConcurrentWorkers = 5;
+      int failedSegments = 0;
+      const int maxConcurrentWorkers = 6;
+      String? firstSegmentError;
 
       void writeAvailable() {
         while (completedBuffer.containsKey(nextWriteIndex)) {
@@ -798,6 +899,7 @@ class DownloadProvider extends ChangeNotifier {
           // Notify listeners periodically
           if (nextWriteIndex % 5 == 0 || nextWriteIndex == total) {
             notifyListeners();
+            _syncBackgroundNotification();
           }
         }
       }
@@ -806,9 +908,9 @@ class DownloadProvider extends ChangeNotifier {
         while (true) {
           if (_cancelledIds.contains(item.episodeId)) break;
 
-          // Backpressure: If memory buffer has > 25 segments waiting to be written, wait
-          if (completedBuffer.length > 25) {
-            await Future.delayed(const Duration(milliseconds: 30));
+          // Backpressure: If memory buffer has > 30 segments waiting to be written, wait
+          if (completedBuffer.length > 30) {
+            await Future.delayed(const Duration(milliseconds: 25));
             continue;
           }
 
@@ -818,7 +920,7 @@ class DownloadProvider extends ChangeNotifier {
           final segUrl = segmentUrls[currentIndex];
           Uint8List? bytes;
 
-          for (int attempt = 0; attempt < 3; attempt++) {
+          for (int attempt = 0; attempt < 4; attempt++) {
             if (_cancelledIds.contains(item.episodeId)) break;
             try {
               final segRes = await client.get(
@@ -830,16 +932,22 @@ class DownloadProvider extends ChangeNotifier {
                 bytes = segRes.bodyBytes;
                 break;
               }
-            } catch (_) {
-              if (attempt < 2) {
-                await Future.delayed(Duration(milliseconds: 200 * (attempt + 1)));
+            } catch (err) {
+              firstSegmentError ??= err.toString();
+              if (attempt < 3) {
+                await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
               }
             }
           }
 
           if (_cancelledIds.contains(item.episodeId)) break;
 
-          completedBuffer[currentIndex] = bytes ?? Uint8List(0);
+          if (bytes != null && bytes.isNotEmpty) {
+            completedBuffer[currentIndex] = bytes;
+          } else {
+            failedSegments++;
+            completedBuffer[currentIndex] = Uint8List(0);
+          }
           writeAvailable();
         }
       }
@@ -849,8 +957,14 @@ class DownloadProvider extends ChangeNotifier {
       await Future.wait(workers);
       writeAvailable();
 
-      if (successfulSegments == 0) {
-        throw Exception('Failed to download video segments');
+      if (_cancelledIds.contains(item.episodeId)) {
+        throw Exception('Download cancelled');
+      }
+
+      if (failedSegments > 0 || successfulSegments < total) {
+        throw Exception(
+          'ดาวน์โหลดไม่สมบูรณ์: โหลดได้ $successfulSegments จาก $total เซกเมนต์ (ขาด $failedSegments เซกเมนต์${firstSegmentError != null ? " - $firstSegmentError" : ""})',
+        );
       }
 
       await sink.flush();
@@ -949,6 +1063,7 @@ class DownloadProvider extends ChangeNotifier {
               final totalReceived = receivedPerPart.fold(0, (sum, v) => sum + v);
               item.progress = (totalReceived / totalLength).clamp(0.01, 0.99);
               notifyListeners();
+              _syncBackgroundNotification();
             }
             await partSink.flush();
           } finally {
@@ -961,6 +1076,11 @@ class DownloadProvider extends ChangeNotifier {
 
       if (_cancelledIds.contains(item.episodeId)) {
         throw Exception('Download cancelled');
+      }
+
+      final totalReceived = receivedPerPart.fold(0, (sum, v) => sum + v);
+      if (totalLength > 0 && totalReceived < totalLength) {
+        throw Exception('ดาวน์โหลดไฟล์ไม่ครบ ($totalReceived / $totalLength ไบต์)');
       }
 
       // Merge all parts sequentially into the final file
@@ -1018,9 +1138,18 @@ class DownloadProvider extends ChangeNotifier {
         if (total > 0) {
           item.progress = (received / total).clamp(0.01, 0.99);
           notifyListeners();
+          _syncBackgroundNotification();
         }
       }
       await sink.flush();
+
+      if (_cancelledIds.contains(item.episodeId)) {
+        throw Exception('Download cancelled');
+      }
+
+      if (total > 0 && received < total) {
+        throw Exception('ดาวน์โหลดไฟล์ไม่ครบ ($received / $total ไบต์)');
+      }
     } finally {
       await sink?.close();
     }
@@ -1122,6 +1251,232 @@ class DownloadProvider extends ChangeNotifier {
     );
   }
 
+  /// Retry all failed downloads across all animes
+  Future<int> retryAllFailedDownloads({
+    List<AnimeCollection>? availableAnime,
+    String? serverUrl,
+  }) async {
+    final failedItems = _downloads.values.where((d) => d.status == DownloadStatus.failed).toList();
+    if (failedItems.isEmpty) return 0;
+
+    int retriedCount = 0;
+    for (final item in failedItems) {
+      final epId = item.episodeId;
+      _cancelledIds.remove(epId);
+
+      AnimeCollection? targetAnime;
+      EpisodeEmbedded? targetEpisode;
+
+      if (availableAnime != null && availableAnime.isNotEmpty) {
+        targetAnime = availableAnime.where((a) => a.slug == item.animeSlug).firstOrNull;
+        if (targetAnime != null) {
+          targetEpisode = targetAnime.episodes.where((e) => e.id == epId).firstOrNull;
+        }
+      }
+
+      targetAnime ??= AnimeCollection()
+        ..slug = item.animeSlug
+        ..title = item.animeTitle
+        ..coverUrl = item.animeCoverUrl;
+
+      targetEpisode ??= EpisodeEmbedded()
+        ..id = item.episodeId
+        ..title = item.episodeTitle
+        ..episodeNumber = item.episodeNumber
+        ..streamUrl = item.streamUrl;
+
+      targetAnime.episodes = [targetEpisode];
+
+      item.status = DownloadStatus.queued;
+      item.progress = 0.0;
+      item.errorMessage = null;
+
+      final req = _QueuedDownloadRequest(
+        anime: targetAnime,
+        episode: targetEpisode,
+        serverUrl: serverUrl,
+      );
+      _downloadQueue.add(req);
+      retriedCount++;
+    }
+
+    if (retriedCount > 0) {
+      await _saveToPrefs();
+      notifyListeners();
+      _processQueue();
+    }
+    return retriedCount;
+  }
+
+  /// Retry all failed downloads for a specific anime
+  Future<int> retryFailedDownloadsForAnime(
+    String animeSlug, {
+    AnimeCollection? anime,
+    String? serverUrl,
+  }) async {
+    final failedItems = _downloads.values
+        .where((d) => d.animeSlug == animeSlug && d.status == DownloadStatus.failed)
+        .toList();
+    if (failedItems.isEmpty) return 0;
+
+    int retriedCount = 0;
+    for (final item in failedItems) {
+      final epId = item.episodeId;
+      _cancelledIds.remove(epId);
+
+      EpisodeEmbedded? targetEp;
+      if (anime != null) {
+        targetEp = anime.episodes.where((e) => e.id == epId).firstOrNull;
+      }
+
+      final targetAnime = anime ?? (AnimeCollection()
+        ..slug = item.animeSlug
+        ..title = item.animeTitle
+        ..coverUrl = item.animeCoverUrl);
+
+      targetEp ??= EpisodeEmbedded()
+        ..id = item.episodeId
+        ..title = item.episodeTitle
+        ..episodeNumber = item.episodeNumber
+        ..streamUrl = item.streamUrl;
+
+      targetAnime.episodes = [targetEp];
+
+      item.status = DownloadStatus.queued;
+      item.progress = 0.0;
+      item.errorMessage = null;
+
+      final req = _QueuedDownloadRequest(
+        anime: targetAnime,
+        episode: targetEp,
+        serverUrl: serverUrl,
+      );
+      _downloadQueue.add(req);
+      retriedCount++;
+    }
+
+    if (retriedCount > 0) {
+      await _saveToPrefs();
+      notifyListeners();
+      _processQueue();
+    }
+    return retriedCount;
+  }
+
+  /// Redownloads a single episode by removing existing file and starting a fresh download
+  Future<void> redownloadEpisode(
+    String episodeId, {
+    AnimeCollection? anime,
+    EpisodeEmbedded? episode,
+    String? serverUrl,
+  }) async {
+    final item = _downloads[episodeId];
+    if (item == null && episode == null) return;
+
+    // 1. If currently downloading or queued, cancel first
+    if (_activeEpisodeIds.contains(episodeId) ||
+        _downloadQueue.any((q) => q.episode.id == episodeId)) {
+      await cancelDownload(episodeId);
+    }
+
+    // 2. Resolve target anime and episode
+    AnimeCollection? targetAnime = anime;
+    if (targetAnime == null && item != null) {
+      targetAnime = AnimeCollection()
+        ..slug = item.animeSlug
+        ..title = item.animeTitle
+        ..coverUrl = item.animeCoverUrl;
+    }
+
+    EpisodeEmbedded? targetEpisode = episode;
+    if (targetEpisode == null && item != null) {
+      targetEpisode = EpisodeEmbedded()
+        ..id = item.episodeId
+        ..title = item.episodeTitle
+        ..episodeNumber = item.episodeNumber
+        ..streamUrl = item.streamUrl;
+    }
+
+    if (targetAnime == null || targetEpisode == null) return;
+    targetAnime.episodes = [targetEpisode];
+
+    // 3. Delete existing local file
+    final localPath = item?.localFilePath;
+    if (localPath != null) {
+      try {
+        final f = File(localPath);
+        if (f.existsSync()) f.deleteSync();
+        for (int i = 0; i < 8; i++) {
+          final part = File('$localPath.part$i');
+          if (part.existsSync()) part.deleteSync();
+        }
+      } catch (_) {}
+    }
+
+    // 4. Remove from downloads map and reset cancelled status
+    _downloads.remove(episodeId);
+    _cancelledIds.remove(episodeId);
+    await _saveToPrefs();
+    notifyListeners();
+    refreshStorageSpace();
+
+    // 5. Start fresh download
+    await startDownload(
+      anime: targetAnime,
+      episode: targetEpisode,
+      serverUrl: serverUrl,
+    );
+  }
+
+  /// Redownload all downloaded or failed episodes for a specific anime
+  Future<int> redownloadAnime(
+    String animeSlug, {
+    AnimeCollection? anime,
+    String? serverUrl,
+  }) async {
+    final episodesToRedownload = _downloads.values
+        .where((d) => d.animeSlug == animeSlug)
+        .toList();
+
+    if (episodesToRedownload.isEmpty && anime != null) {
+      return await downloadAllEpisodes(anime: anime, serverUrl: serverUrl);
+    }
+
+    int count = 0;
+    for (final item in episodesToRedownload) {
+      final ep = anime?.episodes.where((e) => e.id == item.episodeId).firstOrNull;
+      await redownloadEpisode(
+        item.episodeId,
+        anime: anime,
+        episode: ep,
+        serverUrl: serverUrl,
+      );
+      count++;
+    }
+    return count;
+  }
+
+  /// Redownload all downloads that are suspiciously small (< 35MB)
+  Future<int> redownloadPossiblyIncompleteDownloads({
+    List<AnimeCollection>? availableAnime,
+    String? serverUrl,
+  }) async {
+    final incomplete = _downloads.values.where((d) => d.isPossiblyIncomplete).toList();
+    int count = 0;
+    for (final item in incomplete) {
+      final realAnime = availableAnime?.where((a) => a.slug == item.animeSlug).firstOrNull;
+      final ep = realAnime?.episodes.where((e) => e.id == item.episodeId).firstOrNull;
+      await redownloadEpisode(
+        item.episodeId,
+        anime: realAnime,
+        episode: ep,
+        serverUrl: serverUrl,
+      );
+      count++;
+    }
+    return count;
+  }
+
   /// Delete all downloads for a specific anime
   Future<void> deleteAnimeDownloads(String slug) async {
     // Also remove from queue if any
@@ -1147,5 +1502,6 @@ class DownloadProvider extends ChangeNotifier {
     await _saveToPrefs();
     notifyListeners();
     refreshStorageSpace();
+    _syncBackgroundNotification(force: true);
   }
 }

@@ -148,6 +148,21 @@ class DetailScreen extends StatelessWidget {
                         ),
                       );
                     }
+                  } else if (value == 'redownload_all') {
+                    final queued = await downloadProvider.redownloadAnime(
+                      currentAnime.slug,
+                      anime: currentAnime,
+                      serverUrl: provider.serverUrl,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('กำลังดาวน์โหลดใหม่ทั้งหมด $queued ตอน...'),
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Colors.green.shade800,
+                        ),
+                      );
+                    }
                   } else if (value == 'cancel_downloads') {
                     await downloadProvider.cancelAnimeDownloads(currentAnime.slug);
                     if (context.mounted) {
@@ -228,6 +243,22 @@ class DetailScreen extends StatelessWidget {
                             SizedBox(width: 10),
                             Text(
                               'ดาวน์โหลดทุกตอน',
+                              style: TextStyle(color: AppTheme.textMain, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (downloadProvider.getDownloadedEpisodesCount(currentAnime) > 0 &&
+                        !downloadProvider.isAnimeDownloading(anime.slug)) ...[
+                      const PopupMenuItem(
+                        value: 'redownload_all',
+                        child: Row(
+                          children: [
+                            Icon(Icons.refresh, color: AppTheme.accent, size: 20),
+                            SizedBox(width: 10),
+                            Text(
+                              'ดาวน์โหลดใหม่ทุกตอน',
                               style: TextStyle(color: AppTheme.textMain, fontSize: 14),
                             ),
                           ],
@@ -480,27 +511,40 @@ class DetailScreen extends StatelessWidget {
                           }
 
                           if (isDownloaded && dlItem != null) {
+                            final isIncomplete = dlItem.isPossiblyIncomplete;
                             return SizedBox(
                               height: 44,
                               width: double.infinity,
                               child: OutlinedButton(
                                 onPressed: () => _showDownloadOptionsSheet(context, dlItem, downloadProvider),
                                 style: OutlinedButton.styleFrom(
-                                  side: BorderSide(color: Colors.green.withOpacity(0.4)),
-                                  backgroundColor: Colors.green.withOpacity(0.06),
+                                  side: BorderSide(
+                                    color: isIncomplete ? Colors.amber.withOpacity(0.5) : Colors.green.withOpacity(0.4),
+                                  ),
+                                  backgroundColor: isIncomplete ? Colors.amber.withOpacity(0.08) : Colors.green.withOpacity(0.06),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.check_circle, size: 18, color: Colors.green),
-                                    SizedBox(width: 8),
+                                    Icon(
+                                      isIncomplete ? Icons.warning_amber_rounded : Icons.check_circle,
+                                      size: 18,
+                                      color: isIncomplete ? Colors.amber : Colors.green,
+                                    ),
+                                    const SizedBox(width: 8),
                                     Flexible(
                                       child: Text(
-                                        'ดาวน์โหลดเก็บไว้ในเครื่องแล้ว (แตะเพื่อจัดการ)',
+                                        isIncomplete
+                                            ? 'ไฟล์อาจไม่ครบ (${dlItem.formattedFileSize}) - แตะเพื่อโหลดใหม่'
+                                            : 'ดาวน์โหลดเก็บไว้ในเครื่องแล้ว (แตะเพื่อจัดการ)',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w600),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isIncomplete ? Colors.amber : Colors.green,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1091,6 +1135,13 @@ class DetailScreen extends StatelessWidget {
     }
 
     if (isDownloaded && dlItem != null) {
+      if (dlItem.isPossiblyIncomplete) {
+        return IconButton(
+          icon: const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 22),
+          tooltip: 'ไฟล์อาจไม่สมบูรณ์ (${dlItem.formattedFileSize}) - แตะเพื่อจัดการ/โหลดใหม่',
+          onPressed: () => _showDownloadOptionsSheet(context, dlItem, dlProv),
+        );
+      }
       return IconButton(
         icon: const Icon(Icons.check_circle, color: Colors.green, size: 22),
         tooltip: 'จัดการไฟล์ออฟไลน์',
@@ -1192,12 +1243,73 @@ class DetailScreen extends StatelessWidget {
                   Text(item.remainingTimeText, style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+              if (item.isPossiblyIncomplete) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'ไฟล์นี้มีขนาดเพียง ${item.formattedFileSize} ซึ่งอาจดาวน์โหลดไม่ครบเรื่อง แนะนำให้กดดาวน์โหลดใหม่',
+                          style: const TextStyle(color: Colors.amber, fontSize: 11.5, height: 1.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Text(
                 'ระบบจะลบไฟล์อัตโนมัติหากดูจบแล้วครบ 1 วัน หรือโหลดไว้แล้วครบ 7 วัน',
                 style: TextStyle(color: Colors.white38, fontSize: 11),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    final catalogProv = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                    final realAnime = catalogProv.allAnime.where((a) => a.slug == item.animeSlug).firstOrNull;
+                    final realEp = realAnime?.episodes.where((e) => e.id == item.episodeId).firstOrNull;
+                    await dlProv.redownloadEpisode(
+                      item.episodeId,
+                      anime: realAnime,
+                      episode: realEp,
+                      serverUrl: catalogProv.serverUrl,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('กำลังดาวน์โหลดใหม่: ${item.episodeTitle}...'),
+                          backgroundColor: Colors.green.shade800,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: Text(
+                    item.isPossiblyIncomplete ? 'ดาวน์โหลดใหม่ (โหลดทับไฟล์เดิม)' : 'ดาวน์โหลดตอนนี้ใหม่',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: item.isPossiblyIncomplete ? Colors.amber.shade800 : AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
