@@ -12,7 +12,7 @@ from extractor import call_llm, clean_json_text
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "custom_sites.json")
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
 }
@@ -84,7 +84,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "Stream-APH / QQStream",
         "match_domains": ["stream-aph", "qqhls", "qqstream"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://qqstream.stream-aph.xyz/",
             "Origin": "https://qqstream.stream-aph.xyz",
             "Accept": "*/*"
@@ -95,7 +95,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "Animenani / Nya Stream",
         "match_domains": ["animenani", "nya.animenani"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://nya.animenani.com/",
             "Origin": "https://nya.animenani.com",
             "Accept": "*/*"
@@ -106,7 +106,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "24PlayerHD / Orbitalkthai",
         "match_domains": ["24playerhd", "orbitalkthai"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://main.24playerhd.com/",
             "Origin": "https://main.24playerhd.com",
             "Accept": "*/*"
@@ -117,7 +117,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "Anifume / Rukoluo",
         "match_domains": ["anifume", "rukoluo"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://anifume.com/",
             "Accept": "*/*"
         },
@@ -127,7 +127,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "FairyAnime / TonyTonyChopper",
         "match_domains": ["fairyanime", "tonytonychopper"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://anime.tonytonychopper.net/",
             "Accept": "*/*"
         },
@@ -137,7 +137,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "Animemami / Maimeorder",
         "match_domains": ["maimeorder", "animemami"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://animemami.xyz/",
             "Origin": "https://animemami.xyz",
             "Accept": "*/*"
@@ -148,7 +148,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "GetPlay CDN",
         "match_domains": ["getplay-cdn"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://getplay-cdn.com/",
             "Origin": "https://getplay-cdn.com",
             "Accept": "*/*"
@@ -159,7 +159,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "OK-HD / OK-720",
         "match_domains": ["ok-hd", "ok-720"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://ok-hd.com/",
             "Origin": "https://ok-hd.com",
             "Accept": "*/*"
@@ -170,7 +170,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         "name": "Surrit / nJAV / MissAV",
         "match_domains": ["surrit", "njavtv", "missav"],
         "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Referer": "https://njavtv.com/",
             "Origin": "https://njavtv.com",
             "Accept": "*/*"
@@ -200,7 +200,7 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
                 match_domains.append(parsed.netloc.lower().replace("www.", ""))
 
         headers = {
-            "User-Agent": site.get("proxy_user_agent") or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": site.get("proxy_user_agent") or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             "Accept": "*/*"
         }
         if site.get("proxy_referer"):

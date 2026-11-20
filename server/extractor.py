@@ -2,6 +2,7 @@ import re
 import json
 import base64
 import asyncio
+import shutil
 import httpx
 import urllib.parse
 from bs4 import BeautifulSoup
@@ -20,16 +21,95 @@ from handlers.halim import HalimHandler
 from handlers.njavtv import NJavTvHandler
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,th;q=0.8",
+    "Sec-Ch-Ua": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
+async def fetch_html_cmd(url: str, referer: Optional[str] = None) -> Optional[str]:
+    """Fallback fetcher using system wget or curl to bypass Cloudflare/WAF anti-bot 403 blocks."""
+    ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+    accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    accept_lang = "en-US,en;q=0.5"
+
+    if shutil.which("wget"):
+        try:
+            cmd = [
+                "wget", "-q", "-O", "-",
+                f"--user-agent={ua}",
+                f"--header=Accept: {accept}",
+                f"--header=Accept-Language: {accept_lang}",
+                "--timeout=20",
+                "--no-check-certificate",
+            ]
+            if referer:
+                cmd.append(f"--header=Referer: {referer}")
+            cmd.append(url)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0 and len(stdout) > 200:
+                text = stdout.decode("utf-8", errors="ignore")
+                return text
+        except Exception as e:
+            print(f"[fetch_html_cmd] wget error: {e}")
+
+    if shutil.which("curl"):
+        try:
+            cmd = [
+                "curl", "-s", "-L", "-k",
+                "-A", ua,
+                "-H", f"Accept: {accept}",
+                "-H", f"Accept-Language: {accept_lang}",
+                "--max-time", "20",
+            ]
+            if referer:
+                cmd.extend(["-e", referer])
+            cmd.append(url)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0 and len(stdout) > 200:
+                text = stdout.decode("utf-8", errors="ignore")
+                return text
+        except Exception as e:
+            print(f"[fetch_html_cmd] curl error: {e}")
+
+    return None
+
 async def fetch_html(url: str) -> str:
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=20.0, verify=False) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.text
+    try:
+        async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=20.0, verify=False) as client:
+            resp = await client.get(url)
+            if resp.status_code == 200 and len(resp.text) > 200:
+                return resp.text
+            if resp.status_code in (403, 503, 429) or len(resp.text) <= 200:
+                print(f"[fetch_html] Got status {resp.status_code} ({len(resp.text)} bytes) from {url}, trying wget/curl fallback...")
+                alt = await fetch_html_cmd(url)
+                if alt:
+                    return alt
+            resp.raise_for_status()
+            return resp.text
+    except Exception as e:
+        print(f"[fetch_html] httpx error ({e}), trying wget/curl fallback...")
+        alt = await fetch_html_cmd(url)
+        if alt:
+            return alt
+        raise
 
 async def get_active_model(provider: str, base_url: str) -> Optional[str]:
     try:
@@ -633,7 +713,11 @@ async def resolve_direct_stream(page_url: str, client: Optional[httpx.AsyncClien
         parsed_page = urllib.parse.urlparse(page_url)
         base_origin = f"{parsed_page.scheme}://{parsed_page.netloc}"
         r = await client.get(page_url, headers={"Referer": base_origin})
-        html = r.text
+        if r.status_code in (403, 503, 429) or len(r.text) <= 200:
+            alt = await fetch_html_cmd(page_url, referer=base_origin)
+            html = alt or r.text
+        else:
+            html = r.text
         soup = BeautifulSoup(html, "html.parser")
 
         # 1. Primary handler for this URL

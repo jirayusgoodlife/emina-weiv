@@ -56,7 +56,9 @@ class AnimeWakuHandler(BaseSiteHandler):
         settings: Optional[Dict[str, str]] = None
     ) -> Optional[str]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
             "Referer": page_url,
         }
 
@@ -80,7 +82,12 @@ class AnimeWakuHandler(BaseSiteHandler):
         if not html:
             try:
                 r_page = await client.get(page_url, headers=headers)
-                html = r_page.text
+                if r_page.status_code in (403, 503, 429) or len(r_page.text) < 100:
+                    from extractor import fetch_html_cmd
+                    alt = await fetch_html_cmd(page_url, referer=page_url)
+                    html = alt or r_page.text
+                else:
+                    html = r_page.text
                 soup = BeautifulSoup(html, "html.parser")
             except Exception as e:
                 print(f"[AnimeWaku] Error fetching {page_url}: {e}")
@@ -127,6 +134,17 @@ class AnimeWakuHandler(BaseSiteHandler):
                         if data.get("embed_url"):
                             embed_url = data["embed_url"]
                             break
+                    elif r_api.status_code in (403, 503, 429):
+                        from extractor import fetch_html_cmd
+                        alt = await fetch_html_cmd(api_url, referer=page_url)
+                        if alt:
+                            try:
+                                data = json.loads(alt)
+                                if data.get("embed_url"):
+                                    embed_url = data["embed_url"]
+                                    break
+                            except Exception:
+                                pass
                 except Exception:
                     continue
 
@@ -146,13 +164,20 @@ class AnimeWakuHandler(BaseSiteHandler):
         client: httpx.AsyncClient
     ) -> Optional[str]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
             "Referer": embed_url,
         }
         if not player_html:
             try:
                 r_player = await client.get(embed_url, headers=headers)
-                player_html = r_player.text
+                if r_player.status_code in (403, 503, 429) or len(r_player.text) < 100:
+                    from extractor import fetch_html_cmd
+                    alt = await fetch_html_cmd(embed_url, referer=embed_url)
+                    player_html = alt or r_player.text
+                else:
+                    player_html = r_player.text
             except Exception as e:
                 print(f"[AnimeWaku] Error fetching player {embed_url}: {e}")
                 return None

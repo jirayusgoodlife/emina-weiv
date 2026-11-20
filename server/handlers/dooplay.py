@@ -128,7 +128,7 @@ class DooPlayHandler(BaseSiteHandler):
                 try:
                     from .animenani import decode_animenani_bootstrap
                     r_nya = await client.get(nya_url, headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
                         "Referer": embed_url
                     })
                     manifest = decode_animenani_bootstrap(r_nya.text)

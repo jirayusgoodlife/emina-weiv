@@ -853,7 +853,7 @@ def get_stream_proxy_headers(target_url: str) -> Dict[str, str]:
                 return rule.get("headers", {})
 
     return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Referer": "https://main.24playerhd.com/",
         "Origin": "https://main.24playerhd.com",
         "Accept": "*/*",
