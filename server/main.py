@@ -11,7 +11,7 @@ import httpx
 import os
 
 from db import init_db, get_all_anime, get_anime_by_slug, save_anime, delete_anime, get_settings, save_settings, export_database, import_database
-from extractor import extract_anime, resolve_direct_stream
+from extractor import extract_anime, resolve_direct_stream, fetch_html, parse_html_heuristics, HEADERS
 from rule_generator import (
     load_custom_sites,
     save_custom_sites,
@@ -70,6 +70,12 @@ class ExtractRequest(BaseModel):
 
 class UpdateEpisodesRequest(BaseModel):
     source_url: Optional[str] = None
+    use_ai: bool = False
+
+class UpdateAllRequest(BaseModel):
+    category: Optional[str] = None
+    domain: Optional[str] = None
+    slugs: Optional[List[str]] = None
     use_ai: bool = False
 
 class StreamResolveRequest(BaseModel):
@@ -230,13 +236,6 @@ async def api_resolve_stream(req: StreamResolveRequest):
 def api_get_anime_list():
     return get_all_anime()
 
-@app.get("/api/anime/{slug}")
-def api_get_anime(slug: str):
-    item = get_anime_by_slug(slug)
-    if not item:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    return item
-
 @app.post("/api/anime")
 def api_save_anime(data: Dict[str, Any]):
     if not data.get("slug") or not data.get("title"):
@@ -258,62 +257,399 @@ def api_save_anime(data: Dict[str, Any]):
     saved = save_anime(data_clean)
     return {"status": "ok", "anime": saved}
 
-@app.delete("/api/anime/{slug}")
-def api_delete_anime(slug: str):
-    success = delete_anime(slug)
-    return {"status": "ok", "deleted": success}
-
-@app.post("/api/anime/{slug}/update_episodes")
-async def api_update_episodes(slug: str, req: Optional[UpdateEpisodesRequest] = None):
+async def update_anime_episodes_smart(
+    slug: str,
+    existing: Optional[Dict[str, Any]] = None,
+    source_url: Optional[str] = None,
+    settings: Optional[Dict[str, str]] = None,
+    use_ai: bool = False,
+    client: Optional[httpx.AsyncClient] = None,
+    on_event: Optional[Any] = None
+) -> Dict[str, Any]:
     """
-    Re-fetches and smart merges newest episodes from anime source_url.
-    Preserves existing episodes and stream URLs while appending newly aired episodes.
+    Smart updater for an individual anime:
+    1. Checks if anime exists and has a source_url.
+    2. Fetches latest episodes from source website.
+    3. Matches existing DB episodes; preserves already-resolved direct video stream URLs.
+    4. If new episodes are found (or existing episodes missing video streams), pulls direct video stream URLs immediately.
+    5. Saves updated episodes into SQLite database.
     """
-    existing = get_anime_by_slug(slug)
+    if existing is None:
+        existing = get_anime_by_slug(slug)
     if not existing:
-        raise HTTPException(status_code=404, detail=f"Anime '{slug}' not found")
+        return {"status": "error", "slug": slug, "message": f"Anime '{slug}' not found"}
 
-    source_url = (req and req.source_url) or existing.get("source_url")
-    if not source_url:
-        raise HTTPException(status_code=400, detail="Anime does not have a source_url stored. Please specify source_url.")
+    target_url = (source_url or existing.get("source_url") or "").strip()
+    if not target_url or not target_url.startswith("http"):
+        return {"status": "skipped", "slug": slug, "title": existing.get("title", slug), "message": "No valid source_url stored"}
 
-    settings = get_settings()
-    use_ai = req.use_ai if req else False
+    if settings is None:
+        settings = get_settings()
+
+    if on_event:
+        await on_event({"type": "checking", "slug": slug, "title": existing.get("title", slug), "source_url": target_url})
 
     try:
-        fresh_data = await extract_anime(source_url, settings, use_ai=use_ai)
+        if use_ai:
+            fresh_data = await extract_anime(target_url, settings, use_ai=True)
+            heuristic_data = fresh_data
+        else:
+            html = await fetch_html(target_url)
+            heuristic_data = parse_html_heuristics(html, target_url)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch episodes from {source_url}: {str(e)}")
+        return {"status": "error", "slug": slug, "title": existing.get("title", slug), "message": f"Fetch failed: {str(e)}"}
 
-    target_data = fresh_data
-    if fresh_data.get("split_collections"):
-        matched = next((col for col in fresh_data["split_collections"] if col.get("slug") == slug), None)
+    target_data = heuristic_data
+    if heuristic_data.get("split_collections"):
+        matched = next((col for col in heuristic_data["split_collections"] if col.get("slug") == slug), None)
         if not matched:
             if "-sub" in slug:
-                matched = next((col for col in fresh_data["split_collections"] if "sub" in col.get("slug", "").lower()), None)
+                matched = next((col for col in heuristic_data["split_collections"] if "sub" in col.get("slug", "").lower()), None)
             elif "-dub" in slug:
-                matched = next((col for col in fresh_data["split_collections"] if "dub" in col.get("slug", "").lower()), None)
-        target_data = matched or fresh_data["split_collections"][0]
+                matched = next((col for col in heuristic_data["split_collections"] if "dub" in col.get("slug", "").lower()), None)
+        target_data = matched or heuristic_data["split_collections"][0]
 
     target_data = dict(target_data)
     target_data["slug"] = slug
-    target_data["source_url"] = source_url
+    target_data["source_url"] = target_url
 
-    prev_count = len(existing.get("episodes", []))
+    existing_eps = existing.get("episodes", [])
+    existing_by_num = {float(ep["episode_number"]): ep for ep in existing_eps if ep.get("episode_number") is not None}
+    incoming_eps = target_data.get("episodes", [])
+
+    # Pre-populate already known stream_urls and page_urls from existing DB
+    for ep in incoming_eps:
+        try:
+            num = float(ep.get("episode_number", 0))
+            if num in existing_by_num:
+                ex = existing_by_num[num]
+                if ex.get("stream_url") and not ep.get("stream_url"):
+                    ep["stream_url"] = ex["stream_url"]
+                if ex.get("page_url") and not ep.get("page_url"):
+                    ep["page_url"] = ex["page_url"]
+        except Exception:
+            pass
+
+    # Episodes needing video stream resolution:
+    # 1. Newly aired episodes (numbers not in existing_by_num)
+    # 2. Existing episodes where stream_url is missing
+    episodes_to_resolve = [
+        ep for ep in incoming_eps
+        if not ep.get("stream_url") and ep.get("page_url")
+    ]
+
+    prev_count = len(existing_eps)
+    incoming_count = len(incoming_eps)
+    new_ep_candidates = [
+        ep for ep in incoming_eps
+        if float(ep.get("episode_number", 0)) not in existing_by_num
+    ]
+
+    # If no episodes need resolution and no new episodes found, skip heavy operations
+    if not episodes_to_resolve and len(new_ep_candidates) == 0:
+        return {
+            "status": "up_to_date",
+            "slug": slug,
+            "title": existing.get("title", slug),
+            "source_url": target_url,
+            "previous_count": prev_count,
+            "current_count": prev_count,
+            "new_episodes_added": 0,
+            "streams_resolved": 0
+        }
+
+    # Pull video stream data for new / missing episodes
+    if on_event and episodes_to_resolve:
+        await on_event({
+            "type": "resolving",
+            "slug": slug,
+            "title": existing.get("title", slug),
+            "to_resolve_count": len(episodes_to_resolve),
+            "message": f"พบตอนใหม่/ขาดวิดีโอ กำลังดึงวิดีโอ {len(episodes_to_resolve)} ตอน..."
+        })
+
+    sem = asyncio.Semaphore(4)
+    resolved_count = 0
+
+    async def _resolve(ep):
+        nonlocal resolved_count
+        async with sem:
+            try:
+                s = await resolve_direct_stream(ep["page_url"], client=client, settings=settings)
+                if s:
+                    ep["stream_url"] = s
+                    resolved_count += 1
+            except Exception as e:
+                print(f"[Update] Error resolving stream for {ep.get('title')}: {e}")
+
+    if episodes_to_resolve:
+        await asyncio.gather(*(_resolve(ep) for ep in episodes_to_resolve))
+
+    # Save to database
     saved = save_anime(target_data)
     curr_count = len(saved.get("episodes", []))
     new_added = max(0, curr_count - prev_count)
 
     return {
-        "status": "ok",
+        "status": "updated",
         "slug": slug,
-        "title": saved.get("title", existing.get("title")),
-        "source_url": source_url,
+        "title": saved.get("title", existing.get("title", slug)),
+        "source_url": target_url,
         "previous_count": prev_count,
         "current_count": curr_count,
         "new_episodes_added": new_added,
+        "streams_resolved": resolved_count,
         "anime": saved
     }
+
+@app.post("/api/anime/{slug}/update_episodes")
+async def api_update_episodes(slug: str, req: Optional[UpdateEpisodesRequest] = None):
+    """
+    Re-fetches and smart merges newest episodes from anime source_url.
+    Preserves existing episodes and stream URLs while appending newly aired episodes and resolving videos.
+    """
+    source_url = (req and req.source_url) or None
+    use_ai = req.use_ai if req else False
+    settings = get_settings()
+    res = await update_anime_episodes_smart(slug, source_url=source_url, settings=settings, use_ai=use_ai)
+    if res.get("status") == "error":
+        raise HTTPException(status_code=500, detail=res.get("message", "Update failed"))
+    return res
+
+@app.post("/api/anime/update_all")
+async def api_update_all(req: Optional[UpdateAllRequest] = None):
+    """
+    Batch update all anime or filtered by category/domain.
+    Checks source websites, detects new episodes, resolves video streams, and saves to database.
+    """
+    category = req.category if req else None
+    domain = req.domain if req else None
+    slugs = req.slugs if req else None
+
+    animes = get_all_anime()
+    if category and category.lower() != "all" and category.strip():
+        cat_lower = category.strip().lower()
+        animes = [a for a in animes if any(cat_lower in g.lower() for g in a.get("genres", []))]
+    if domain and domain.lower() != "all" and domain.strip():
+        dom_lower = domain.strip().lower()
+        animes = [a for a in animes if dom_lower in (a.get("source_url") or "").lower()]
+    if slugs:
+        slugs_set = set(slugs)
+        animes = [a for a in animes if a.get("slug") in slugs_set]
+
+    target_animes = [a for a in animes if (a.get("source_url") or "").strip().startswith("http")]
+    settings = get_settings()
+    sem = asyncio.Semaphore(3)
+
+    summary = {
+        "status": "ok",
+        "total_checked": 0,
+        "updated_count": 0,
+        "new_episodes_total": 0,
+        "no_change_count": 0,
+        "error_count": 0,
+        "results": []
+    }
+
+    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=25.0, verify=False) as client:
+        async def worker(anime_item):
+            slug = anime_item["slug"]
+            title = anime_item.get("title", slug)
+            async with sem:
+                try:
+                    res = await update_anime_episodes_smart(slug, existing=anime_item, settings=settings, client=client)
+                except Exception as e:
+                    res = {"status": "error", "slug": slug, "title": title, "message": str(e)}
+
+                summary["total_checked"] += 1
+                if res.get("status") == "updated":
+                    summary["updated_count"] += 1
+                    summary["new_episodes_total"] += res.get("new_episodes_added", 0)
+                elif res.get("status") == "up_to_date":
+                    summary["no_change_count"] += 1
+                elif res.get("status") == "error":
+                    summary["error_count"] += 1
+
+                summary["results"].append({
+                    "slug": slug,
+                    "title": title,
+                    "status": res.get("status"),
+                    "new_episodes_added": res.get("new_episodes_added", 0),
+                    "current_count": res.get("current_count", len(anime_item.get("episodes", []))),
+                    "message": res.get("message", "")
+                })
+
+        tasks = [worker(a) for a in target_animes]
+        await asyncio.gather(*tasks)
+
+    return summary
+
+@app.get("/api/anime/update_all_stream")
+@app.post("/api/anime/update_all_stream")
+async def api_update_all_stream(
+    category: Optional[str] = None,
+    domain: Optional[str] = None,
+    req: Optional[UpdateAllRequest] = None
+):
+    """
+    Real-time streaming (SSE) endpoint for batch updating anime.
+    Sends live progress events as each anime is checked, streams resolved, and saved.
+    """
+    final_category = (req and req.category) or category
+    final_domain = (req and req.domain) or domain
+    final_slugs = req.slugs if req else None
+
+    animes = get_all_anime()
+    if final_category and final_category.lower() != "all" and final_category.strip():
+        cat_lower = final_category.strip().lower()
+        animes = [a for a in animes if any(cat_lower in g.lower() for g in a.get("genres", []))]
+    if final_domain and final_domain.lower() != "all" and final_domain.strip():
+        dom_lower = final_domain.strip().lower()
+        animes = [a for a in animes if dom_lower in (a.get("source_url") or "").lower()]
+    if final_slugs:
+        slugs_set = set(final_slugs)
+        animes = [a for a in animes if a.get("slug") in slugs_set]
+
+    target_animes = [a for a in animes if (a.get("source_url") or "").strip().startswith("http")]
+
+    async def event_generator():
+        queue = asyncio.Queue()
+        total = len(target_animes)
+
+        await queue.put({
+            "type": "start",
+            "total": total,
+            "category": final_category or "",
+            "domain": final_domain or ""
+        })
+
+        if total == 0:
+            await queue.put({
+                "type": "complete",
+                "summary": {
+                    "total_checked": 0,
+                    "updated_count": 0,
+                    "new_episodes_total": 0,
+                    "no_change_count": 0,
+                    "error_count": 0,
+                    "results": []
+                }
+            })
+            await queue.put(None)
+            return
+
+        settings = get_settings()
+        sem = asyncio.Semaphore(3)
+        summary = {
+            "total_checked": 0,
+            "updated_count": 0,
+            "new_episodes_total": 0,
+            "no_change_count": 0,
+            "error_count": 0,
+            "results": []
+        }
+
+        async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=25.0, verify=False) as client:
+            async def worker(idx: int, anime_item: Dict[str, Any]):
+                slug = anime_item["slug"]
+                title = anime_item.get("title", slug)
+
+                async with sem:
+                    await queue.put({
+                        "type": "checking",
+                        "index": idx + 1,
+                        "total": total,
+                        "slug": slug,
+                        "title": title
+                    })
+
+                    async def on_single_event(ev: Dict[str, Any]):
+                        await queue.put({
+                            "type": "item_event",
+                            "index": idx + 1,
+                            "total": total,
+                            "slug": slug,
+                            "title": title,
+                            "event": ev
+                        })
+
+                    try:
+                        res = await update_anime_episodes_smart(
+                            slug=slug,
+                            existing=anime_item,
+                            settings=settings,
+                            client=client,
+                            on_event=on_single_event
+                        )
+                    except Exception as e:
+                        res = {
+                            "status": "error",
+                            "slug": slug,
+                            "title": title,
+                            "message": str(e)
+                        }
+
+                    summary["total_checked"] += 1
+                    if res.get("status") == "updated":
+                        summary["updated_count"] += 1
+                        summary["new_episodes_total"] += res.get("new_episodes_added", 0)
+                    elif res.get("status") == "up_to_date":
+                        summary["no_change_count"] += 1
+                    elif res.get("status") == "error":
+                        summary["error_count"] += 1
+
+                    summary["results"].append({
+                        "slug": slug,
+                        "title": title,
+                        "status": res.get("status"),
+                        "new_episodes_added": res.get("new_episodes_added", 0),
+                        "current_count": res.get("current_count", len(anime_item.get("episodes", []))),
+                        "message": res.get("message", "")
+                    })
+
+                    await queue.put({
+                        "type": "item_done",
+                        "index": idx + 1,
+                        "total": total,
+                        "slug": slug,
+                        "title": title,
+                        "result": res
+                    })
+
+            async def run_all():
+                tasks = [worker(i, a) for i, a in enumerate(target_animes)]
+                await asyncio.gather(*tasks)
+                await queue.put({
+                    "type": "complete",
+                    "summary": summary
+                })
+                await queue.put(None)
+
+            bg_task = asyncio.create_task(run_all())
+
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+
+            await bg_task
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@app.get("/api/anime/{slug}")
+def api_get_anime(slug: str):
+    item = get_anime_by_slug(slug)
+    if not item:
+        raise HTTPException(status_code=404, detail="Anime not found")
+    return item
+
+@app.delete("/api/anime/{slug}")
+def api_delete_anime(slug: str):
+    success = delete_anime(slug)
+    if not success:
+        raise HTTPException(status_code=404, detail="Anime not found")
+    return {"status": "ok", "deleted": True}
 
 @app.get("/api/sync")
 def api_sync():
@@ -566,9 +902,10 @@ async def proxy_hls_manifest(url: str, request: Request):
                 path = urllib.parse.urlparse(target_url).path.lower()
                 is_seg = (
                     last_tag == "EXTINF"
-                    or any(path.endswith(ext) for ext in [".webp", ".ts", ".m4s", ".mp4", ".png", ".jpg"])
+                    or any(path.endswith(ext) for ext in [".webp", ".ts", ".m4s", ".mp4", ".png", ".jpg", ".jpeg"])
                     or ".webp" in line_str
                     or ".ts" in line_str
+                    or ".jpeg" in line_str
                     or "/file/hls" in line_str
                 )
                 encoded = urllib.parse.quote(target_url, safe="")

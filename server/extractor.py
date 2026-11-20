@@ -17,6 +17,7 @@ from handlers.animeruka import AnimeRukaHandler
 from handlers.animewaku import AnimeWakuHandler
 from handlers.wowdrama import WowDramaHandler
 from handlers.halim import HalimHandler
+from handlers.njavtv import NJavTvHandler
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -691,12 +692,19 @@ async def resolve_direct_stream(page_url: str, client: Optional[httpx.AsyncClien
             if res:
                 return res
 
-        # 9. Universal generic fallback
+        # 9. nJAV TV / MissAV fallback
+        njav = NJavTvHandler()
+        if njav.can_handle(page_url, html=html):
+            res = await njav.resolve_stream(page_url, html, soup, client, settings=settings)
+            if res:
+                return res
+
+        # 10. Universal generic fallback
         res = await GenericHandler().resolve_stream(page_url, html, soup, client, settings=settings)
         if res:
             return res
 
-        # 10. AI-Assisted Deobfuscation Fallback for Download Stream
+        # 11. AI-Assisted Deobfuscation Fallback for Download Stream
         llm_res = await resolve_stream_with_llm(page_url, html, soup, client, settings=settings)
         if llm_res:
             return llm_res

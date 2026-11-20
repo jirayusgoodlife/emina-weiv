@@ -6,6 +6,7 @@ import httpx
 from .base import BaseSiteHandler
 from .anifume import AnifumeHandler
 from .alphahen import AlphaHenHandler
+from .njavtv import NJavTvHandler
 from .dooplay import DooPlayHandler
 from .animenani import AnimenaniHandler
 from .fairyanime import FairyAnimeHandler
@@ -21,6 +22,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "custom_s
 def get_all_handlers() -> List[BaseSiteHandler]:
     """Returns all registered handlers in priority order."""
     handlers: List[BaseSiteHandler] = [
+        NJavTvHandler(),
         WowDramaHandler(),
         AnifumeHandler(),
         AlphaHenHandler(),

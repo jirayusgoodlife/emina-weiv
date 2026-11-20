@@ -49,6 +49,9 @@ class InAppStreamProxy {
         lower.contains('getplay-cdn') ||
         lower.contains('ok-hd') ||
         lower.contains('ok-720') ||
+        lower.contains('surrit') ||
+        lower.contains('njavtv') ||
+        lower.contains('missav') ||
         lower.endsWith('.txt') ||
         lower.contains('/o/');
   }
@@ -70,6 +73,15 @@ class InAppStreamProxy {
     }
 
     // 2. Built-in defaults
+    if (lower.contains('surrit') || lower.contains('njavtv') || lower.contains('missav')) {
+      return {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': 'https://njavtv.com/',
+        'Origin': 'https://njavtv.com',
+        'Accept': '*/*',
+      };
+    }
     if (lower.contains('stream-aph') || lower.contains('qqhls') || lower.contains('qqstream')) {
       return {
         'User-Agent':
@@ -583,8 +595,11 @@ class InAppStreamProxy {
               path.endsWith('.ts') ||
               path.endsWith('.m4s') ||
               path.endsWith('.mp4') ||
+              path.endsWith('.jpeg') ||
+              path.endsWith('.jpg') ||
               trimmed.contains('.webp') ||
               trimmed.contains('.ts') ||
+              trimmed.contains('.jpeg') ||
               trimmed.contains('/file/hls');
 
           if (isSeg) {

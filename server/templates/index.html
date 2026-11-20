@@ -494,11 +494,137 @@
       background: rgba(255, 255, 255, 0.02);
     }
 
-    /* Anime Catalog Grid */
+    /* Anime Catalog Grid & View Modes */
     .anime-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       gap: 1.8rem;
+    }
+
+    /* List View (with cover) */
+    .anime-grid.view-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .anime-grid.view-list .anime-card {
+      flex-direction: row;
+      align-items: center;
+      padding: 10px 14px;
+      gap: 16px;
+    }
+    .anime-grid.view-list .anime-poster-box {
+      width: 64px;
+      height: 90px;
+      min-width: 64px;
+      padding-top: 0;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .anime-grid.view-list .anime-ep-badge {
+      display: none;
+    }
+    .anime-grid.view-list .anime-info {
+      padding: 0;
+      flex: 1;
+      min-width: 0;
+    }
+    .anime-grid.view-list .anime-card-title {
+      font-size: 1rem;
+      margin-bottom: 4px;
+      -webkit-line-clamp: 1;
+    }
+    .anime-grid.view-list .anime-genres {
+      margin-bottom: 0;
+    }
+    .anime-grid.view-list .anime-actions {
+      margin-top: 0;
+      flex-wrap: nowrap;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    /* Names Only View (List without cover) */
+    .anime-grid.view-names {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .anime-grid.view-names .anime-card {
+      flex-direction: row;
+      align-items: center;
+      padding: 10px 16px;
+      gap: 14px;
+    }
+    .anime-grid.view-names .anime-poster-box {
+      display: none;
+    }
+    .anime-grid.view-names .anime-info {
+      padding: 0;
+      flex: 1;
+      min-width: 0;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+    }
+    .anime-grid.view-names .anime-info-header {
+      order: 2;
+      margin-bottom: 0 !important;
+      flex-shrink: 0;
+    }
+    .anime-grid.view-names .anime-card-title {
+      order: 1;
+      font-size: 0.95rem;
+      margin-bottom: 0;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+    .anime-grid.view-names .anime-genres {
+      order: 3;
+      margin-bottom: 0;
+      flex-shrink: 0;
+    }
+    .anime-grid.view-names .anime-actions {
+      margin-top: 0;
+      flex-wrap: nowrap;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    /* View Mode Switcher Buttons */
+    .view-mode-group {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .view-mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+    .view-mode-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .view-mode-btn.active {
+      background: rgba(255, 42, 109, 0.2);
+      color: var(--primary);
+      border: 1px solid rgba(255, 42, 109, 0.4);
+      font-weight: 600;
     }
 
     .anime-card {
@@ -1070,6 +1196,10 @@
             <p class="section-subtitle">ข้อมูลทั้งหมดนี้จะถูกส่งไปยังแอป Flutter หรือส่งออก/นำเข้าเพื่อย้ายเว็บได้ทันที</p>
           </div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-primary" id="btnUpdateAll" onclick="openUpdateAllModal()" title="ตรวจสอบตอนใหม่ของทุกเรื่องในคลัง/หมวดหมู่ และดึงข้อมูลวิดีโอทันที">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              🔄 อัปเดตตอนทั้งหมด (Update All)
+            </button>
             <button class="btn btn-outline" onclick="exportDatabase()" title="ดาวน์โหลดฐานข้อมูลเป็นไฟล์ JSON สำรองหรือย้ายเว็บ">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               ส่งออก DB (Export)
@@ -1082,6 +1212,38 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
               รีเฟรช
             </button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Bar -->
+        <div class="catalog-filter-bar" style="display: flex; gap: 10px; margin: 18px 0; flex-wrap: wrap; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 10px 14px; border-radius: 10px;">
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1; min-width: 280px;">
+            <div style="position: relative; flex: 1; min-width: 200px;">
+              <input type="text" id="catalogSearchInput" placeholder="🔍 ค้นหาชื่อเรื่อง..." style="width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: var(--text); font-size: 0.88rem;" oninput="filterCatalog()" />
+            </div>
+            <select id="catalogCategorySelect" style="padding: 8px 12px; background: #131722; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text); font-size: 0.85rem;" onchange="filterCatalog()">
+              <option value="">📂 ทุกหมวดหมู่ (All Categories)</option>
+            </select>
+            <select id="catalogSiteSelect" style="padding: 8px 12px; background: #131722; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: var(--text); font-size: 0.85rem;" onchange="filterCatalog()">
+              <option value="">🌐 ทุกเว็บไซต์ (All Sites)</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="view-mode-group" role="group" aria-label="Catalog View Mode">
+              <button type="button" class="view-mode-btn active" id="viewModeGrid" onclick="setCatalogViewMode('grid')" title="แสดงแบบ Grid (การ์ดรูปภาพ)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                Grid
+              </button>
+              <button type="button" class="view-mode-btn" id="viewModeList" onclick="setCatalogViewMode('list')" title="แสดงแบบ List (รายการพร้อมรูป)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                List
+              </button>
+              <button type="button" class="view-mode-btn" id="viewModeNames" onclick="setCatalogViewMode('names')" title="แสดงแบบ Only Listname (เฉพาะชื่อเรื่อง ไม่มีรูป)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+                Only Names
+              </button>
+            </div>
+            <span id="catalogFilteredCount" style="font-size: 0.85rem; color: var(--text-muted);">กำลังโหลด...</span>
           </div>
         </div>
 
@@ -1443,6 +1605,99 @@
             🚀 นำเข้าข้อมูลทันที
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update All Episodes Modal -->
+  <div id="updateAllModal" class="modal-backdrop">
+    <div class="modal-content" style="max-width: 650px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(5, 217, 232, 0.15); display: flex; align-items: center; justify-content: center; color: var(--accent);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          </div>
+          <div>
+            <h3 style="font-size: 1.15rem; font-weight: 700;">อัปเดตตอนใหม่ทั้งหมด (Update All Episodes)</h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+              ระบบจะตรวจสอบเว็บต้นทางของแต่ละเรื่อง หากพบตอนใหม่จะดึงข้อมูลวิดีโอและบันทึกให้อัตโนมัติ
+            </p>
+          </div>
+        </div>
+        <button class="btn btn-outline" style="padding: 4px 10px;" onclick="closeUpdateAllModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 16px;">
+        <!-- Controls before start -->
+        <div id="updateAllControls" style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px;">
+            <label style="font-weight: 600; font-size: 0.9rem; display: block; margin-bottom: 8px;">ขอบเขตการอัปเดต (Update Scope):</label>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
+                <input type="radio" name="updateScope" value="all" checked />
+                <span>ทุกเรื่องในคลังทั้งหมด (<span id="scopeAllCount">0</span> เรื่อง)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem;">
+                <input type="radio" name="updateScope" value="category" id="scopeCategoryRadio" />
+                <span>เฉพาะในตัวกรองที่เลือก: <strong id="scopeCategoryLabel" style="color: var(--accent);">-</strong> (<span id="scopeCategoryCount">0</span> เรื่อง)</span>
+              </label>
+            </div>
+          </div>
+
+          <div style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; background: rgba(5, 217, 232, 0.05); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 4px;">
+            💡 <strong>ระบบ Smart Update:</strong> จะเทียบตอนในเว็บกับฐานข้อมูลก่อน หากมีตอนใหม่จึงจะดึง direct video stream ให้ทันที สำหรับตอนเดิมที่มีอยู่แล้วจะไม่ต้องดึงซ้ำ ทำให้ทำงานได้รวดเร็วและปลอดภัย
+          </div>
+        </div>
+
+        <!-- Progress & Status during update -->
+        <div id="updateAllProgressSection" style="display: none; flex-direction: column; gap: 14px;">
+          <!-- Progress Bar -->
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px;">
+              <span id="updateAllStatusText" style="color: var(--accent); font-weight: 600;">กำลังเริ่มต้น...</span>
+              <span id="updateAllPercentText" style="color: var(--text-muted);">0%</span>
+            </div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+              <div id="updateAllProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent), var(--primary)); transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+
+          <!-- Stats Counters -->
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 0.72rem; color: var(--text-muted);">ตรวจสอบแล้ว</div>
+              <div id="statChecked" style="font-size: 1.15rem; font-weight: 700; color: var(--text); margin-top: 2px;">0 / 0</div>
+            </div>
+            <div style="background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.2); border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 0.72rem; color: var(--success);">อัปเดตสำเร็จ</div>
+              <div id="statUpdated" style="font-size: 1.15rem; font-weight: 700; color: var(--success); margin-top: 2px;">0</div>
+            </div>
+            <div style="background: rgba(5, 217, 232, 0.08); border: 1px solid rgba(5, 217, 232, 0.2); border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 0.72rem; color: var(--accent);">ตอนใหม่ที่เพิ่ม</div>
+              <div id="statNewEps" style="font-size: 1.15rem; font-weight: 700; color: var(--accent); margin-top: 2px;">0</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 0.72rem; color: var(--text-muted);">เป็นตอนล่าสุด</div>
+              <div id="statUpToDate" style="font-size: 1.15rem; font-weight: 700; color: var(--text-muted); margin-top: 2px;">0</div>
+            </div>
+          </div>
+
+          <!-- Real-time Event Log -->
+          <div>
+            <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">บันทึกการทำงานสด (Live Logs):</div>
+            <div id="updateAllLogBox" style="background: #090c13; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 14px; height: 180px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 0.78rem; line-height: 1.6; color: var(--text-muted);">
+              <!-- Log entries -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="padding: 1rem 1.8rem; border-top: 1px solid var(--card-border); display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn btn-outline" id="btnCancelUpdateAll" onclick="cancelOrCloseUpdateAll()">ปิด</button>
+        <button class="btn btn-primary" id="btnStartUpdateAll" onclick="startUpdateAllEpisodes()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          เริ่มอัปเดตทันที
+        </button>
       </div>
     </div>
   </div>
@@ -2380,6 +2635,9 @@
       }
     }
 
+    let catalogAnimesData = [];
+    let currentUpdateAllAbortController = null;
+
     async function updateAnimeEpisodesDirectly(slug) {
       showToast(`กำลังดึงตอนใหม่ของเรื่อง "${slug}" จากเว็บต้นทาง...`);
       try {
@@ -2402,59 +2660,383 @@
       }
     }
 
-    // Catalog Loading
+    // Catalog Loading & Filtering
     async function loadCatalog() {
       try {
         const res = await fetch('/api/anime');
-        const animes = await res.json();
-        document.getElementById('catalogCount').textContent = animes.length;
+        catalogAnimesData = await res.json();
+        document.getElementById('catalogCount').textContent = catalogAnimesData.length;
 
-        const grid = document.getElementById('catalogGrid');
-        grid.innerHTML = '';
+        // Populate Category and Site Filter Selects
+        populateCatalogFilters(catalogAnimesData);
 
-        if (animes.length === 0) {
-          grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">ยังไม่มีข้อมูลอนิเมะในคลัง กดที่แท็บ "ดึงข้อมูลด้วย AI" เพื่อเพิ่มเรื่องแรก</div>';
-          return;
-        }
-
-        animes.forEach(a => {
-          const card = document.createElement('div');
-          card.className = 'anime-card';
-          const epCount = a.episodes ? a.episodes.length : (a.episode_count || 0);
-          const domain = a.source_url ? extractDomain(a.source_url) : '';
-          const sourceBadge = domain
-            ? `<a href="${a.source_url}" target="_blank" style="text-decoration: none; font-size: 0.72rem; color: var(--accent); background: rgba(5, 217, 232, 0.1); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(5, 217, 232, 0.25);" title="เปิดเว็บต้นทาง: ${a.source_url}">🌐 ${domain}</a>`
-            : `<span style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 2px 7px; border-radius: 4px;">Manual</span>`;
-
-          card.innerHTML = `
-            <div class="anime-poster-box">
-              <img class="anime-poster-img" src="${a.cover_url || 'https://via.placeholder.com/300x450'}" alt="${a.title}" onerror="this.src='https://via.placeholder.com/300x450'" />
-              <div class="anime-ep-badge">${epCount} ตอน</div>
-            </div>
-            <div class="anime-info">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
-                ${sourceBadge}
-                <span style="font-size: 0.75rem; color: var(--text-muted);">${epCount} ตอน</span>
-              </div>
-              <h4 class="anime-card-title">${a.title}</h4>
-              <div class="anime-genres">
-                ${(a.genres || []).slice(0, 3).map(g => `<span class="genre-tag">${g}</span>`).join('')}
-              </div>
-              <div class="anime-actions" style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
-                ${a.source_url ? `
-                  <button class="btn btn-outline" style="padding: 6px 10px; font-size: 0.8rem; border-color: rgba(5, 217, 232, 0.4); color: var(--accent);" onclick="updateAnimeEpisodesDirectly('${a.slug}')" title="ดึงตอนใหม่จากเว็บต้นทางทันที">
-                    🔄 อัปเดตตอน
-                  </button>
-                ` : ''}
-                <button class="btn btn-outline" style="flex: 1; padding: 6px; font-size: 0.8rem;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
-                <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem;" onclick="deleteAnime('${a.slug}')">ลบ</button>
-              </div>
-            </div>
-          `;
-          grid.appendChild(card);
-        });
+        // Render with current filter
+        filterCatalog();
       } catch (e) {
         console.error(e);
+      }
+    }
+
+    function populateCatalogFilters(animes) {
+      const catSelect = document.getElementById('catalogCategorySelect');
+      const siteSelect = document.getElementById('catalogSiteSelect');
+      if (!catSelect || !siteSelect) return;
+
+      const currentCat = catSelect.value;
+      const currentSite = siteSelect.value;
+
+      const genresSet = new Set();
+      const domainsSet = new Set();
+
+      animes.forEach(a => {
+        if (Array.isArray(a.genres)) {
+          a.genres.forEach(g => {
+            if (g && g.trim()) genresSet.add(g.trim());
+          });
+        }
+        if (a.source_url) {
+          const dom = extractDomain(a.source_url);
+          if (dom) domainsSet.add(dom);
+        }
+      });
+
+      const sortedGenres = Array.from(genresSet).sort((a, b) => a.localeCompare(b));
+      const sortedDomains = Array.from(domainsSet).sort((a, b) => a.localeCompare(b));
+
+      catSelect.innerHTML = '<option value="">📂 ทุกหมวดหมู่ (All Categories)</option>' +
+        sortedGenres.map(g => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+
+      siteSelect.innerHTML = '<option value="">🌐 ทุกเว็บไซต์ (All Sites)</option>' +
+        sortedDomains.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+
+      if (currentCat && sortedGenres.includes(currentCat)) catSelect.value = currentCat;
+      if (currentSite && sortedDomains.includes(currentSite)) siteSelect.value = currentSite;
+    }
+
+    function filterCatalog() {
+      const searchVal = (document.getElementById('catalogSearchInput')?.value || '').trim().toLowerCase();
+      const catVal = (document.getElementById('catalogCategorySelect')?.value || '').trim().toLowerCase();
+      const siteVal = (document.getElementById('catalogSiteSelect')?.value || '').trim().toLowerCase();
+
+      let filtered = catalogAnimesData.filter(a => {
+        if (searchVal) {
+          const title = (a.title || '').toLowerCase();
+          const slug = (a.slug || '').toLowerCase();
+          if (!title.includes(searchVal) && !slug.includes(searchVal)) return false;
+        }
+        if (catVal) {
+          const genres = Array.isArray(a.genres) ? a.genres.map(g => g.toLowerCase()) : [];
+          if (!genres.some(g => g.includes(catVal))) return false;
+        }
+        if (siteVal) {
+          const dom = a.source_url ? extractDomain(a.source_url).toLowerCase() : '';
+          if (!dom.includes(siteVal)) return false;
+        }
+        return true;
+      });
+
+      const counter = document.getElementById('catalogFilteredCount');
+      if (counter) {
+        counter.textContent = `แสดง ${filtered.length} / ${catalogAnimesData.length} เรื่อง`;
+      }
+
+      renderCatalogGrid(filtered);
+    }
+
+    // View Mode State for Catalog
+    let catalogViewMode = localStorage.getItem('catalogViewMode') || 'grid';
+
+    function setCatalogViewMode(mode) {
+      catalogViewMode = mode;
+      localStorage.setItem('catalogViewMode', mode);
+
+      ['grid', 'list', 'names'].forEach(m => {
+        const btn = document.getElementById('viewMode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (btn) btn.classList.toggle('active', m === mode);
+      });
+
+      const grid = document.getElementById('catalogGrid');
+      if (grid) {
+        grid.classList.remove('view-list', 'view-names');
+        if (mode === 'list') {
+          grid.classList.add('view-list');
+        } else if (mode === 'names') {
+          grid.classList.add('view-names');
+        }
+      }
+
+      filterCatalog();
+    }
+
+    function renderCatalogGrid(animes) {
+      const grid = document.getElementById('catalogGrid');
+      grid.innerHTML = '';
+
+      // Update active view mode classes and button states
+      ['grid', 'list', 'names'].forEach(m => {
+        const btn = document.getElementById('viewMode' + m.charAt(0).toUpperCase() + m.slice(1));
+        if (btn) btn.classList.toggle('active', m === catalogViewMode);
+      });
+      grid.classList.remove('view-list', 'view-names');
+      if (catalogViewMode === 'list') {
+        grid.classList.add('view-list');
+      } else if (catalogViewMode === 'names') {
+        grid.classList.add('view-names');
+      }
+
+      if (animes.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">ไม่พบรายการที่ตรงกับเงื่อนไขการค้นหา/หมวดหมู่</div>';
+        return;
+      }
+
+      animes.forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'anime-card';
+        const epCount = a.episodes ? a.episodes.length : (a.episode_count || 0);
+        const domain = a.source_url ? extractDomain(a.source_url) : '';
+        const sourceBadge = domain
+          ? `<a href="${a.source_url}" target="_blank" style="text-decoration: none; font-size: 0.72rem; color: var(--accent); background: rgba(5, 217, 232, 0.1); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(5, 217, 232, 0.25);" title="เปิดเว็บต้นทาง: ${a.source_url}">🌐 ${domain}</a>`
+          : `<span style="font-size: 0.72rem; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 2px 7px; border-radius: 4px;">Manual</span>`;
+
+        card.innerHTML = `
+          <div class="anime-poster-box">
+            <img class="anime-poster-img" src="${a.cover_url || 'https://via.placeholder.com/300x450'}" alt="${escapeHtml(a.title)}" onerror="this.src='https://via.placeholder.com/300x450'" />
+            <div class="anime-ep-badge">${epCount} ตอน</div>
+          </div>
+          <div class="anime-info">
+            <div class="anime-info-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px;">
+              ${sourceBadge}
+              <span style="font-size: 0.75rem; color: var(--text-muted);">${epCount} ตอน</span>
+            </div>
+            <h4 class="anime-card-title" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</h4>
+            <div class="anime-genres">
+              ${(a.genres || []).slice(0, 3).map(g => `<span class="genre-tag">${escapeHtml(g)}</span>`).join('')}
+            </div>
+            <div class="anime-actions" style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+              ${a.source_url ? `
+                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 0.8rem; border-color: rgba(5, 217, 232, 0.4); color: var(--accent);" onclick="updateAnimeEpisodesDirectly(${JSON.stringify(a.slug)})" title="ดึงตอนใหม่จากเว็บต้นทางทันที">
+                  🔄 อัปเดตตอน
+                </button>
+              ` : ''}
+              <button class="btn btn-outline" style="flex: 1; padding: 6px 10px; font-size: 0.8rem;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
+              <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem;" onclick="deleteAnime(${JSON.stringify(a.slug)})">ลบ</button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    // Update All Modal & Execution
+    function openUpdateAllModal() {
+      const modal = document.getElementById('updateAllModal');
+      const allCount = catalogAnimesData.filter(a => a.source_url && a.source_url.startsWith('http')).length;
+      document.getElementById('scopeAllCount').textContent = allCount;
+
+      const catVal = (document.getElementById('catalogCategorySelect')?.value || '').trim();
+      const siteVal = (document.getElementById('catalogSiteSelect')?.value || '').trim();
+
+      const catRadio = document.getElementById('scopeCategoryRadio');
+      const catLabel = document.getElementById('scopeCategoryLabel');
+      const catCount = document.getElementById('scopeCategoryCount');
+
+      if (catVal || siteVal) {
+        catRadio.disabled = false;
+        const filterName = catVal && siteVal ? `${catVal} (${siteVal})` : (catVal || siteVal);
+        catLabel.textContent = filterName;
+
+        let filteredCount = catalogAnimesData.filter(a => {
+          if (!a.source_url || !a.source_url.startsWith('http')) return false;
+          if (catVal) {
+            const genres = Array.isArray(a.genres) ? a.genres.map(g => g.toLowerCase()) : [];
+            if (!genres.some(g => g.includes(catVal.toLowerCase()))) return false;
+          }
+          if (siteVal) {
+            const dom = a.source_url ? extractDomain(a.source_url).toLowerCase() : '';
+            if (!dom.includes(siteVal.toLowerCase())) return false;
+          }
+          return true;
+        }).length;
+
+        catCount.textContent = filteredCount;
+        catRadio.checked = true;
+      } else {
+        catRadio.disabled = true;
+        catLabel.textContent = 'ไม่มีตัวกรองที่เลือก';
+        catCount.textContent = '0';
+        document.querySelector('input[name="updateScope"][value="all"]').checked = true;
+      }
+
+      // Reset modal elements
+      document.getElementById('updateAllControls').style.display = 'flex';
+      document.getElementById('updateAllProgressSection').style.display = 'none';
+      const startBtn = document.getElementById('btnStartUpdateAll');
+      startBtn.style.display = 'inline-flex';
+      startBtn.disabled = false;
+      startBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> เริ่มอัปเดตทันที';
+      document.getElementById('btnCancelUpdateAll').textContent = 'ปิด';
+
+      document.getElementById('updateAllProgressBar').style.width = '0%';
+      document.getElementById('updateAllPercentText').textContent = '0%';
+      document.getElementById('updateAllStatusText').textContent = 'พร้อมเริ่มต้น';
+      document.getElementById('statChecked').textContent = '0 / ' + allCount;
+      document.getElementById('statUpdated').textContent = '0';
+      document.getElementById('statNewEps').textContent = '0';
+      document.getElementById('statUpToDate').textContent = '0';
+      document.getElementById('updateAllLogBox').innerHTML = '';
+
+      modal.classList.add('open');
+    }
+
+    function closeUpdateAllModal() {
+      if (currentUpdateAllAbortController) {
+        if (!confirm('การอัปเดตกำลังทำงานอยู่ คุณต้องการยกเลิกหรือไม่?')) return;
+        currentUpdateAllAbortController.abort();
+        currentUpdateAllAbortController = null;
+      }
+      document.getElementById('updateAllModal').classList.remove('open');
+    }
+
+    function cancelOrCloseUpdateAll() {
+      closeUpdateAllModal();
+    }
+
+    async function startUpdateAllEpisodes() {
+      const scopeRadio = document.querySelector('input[name="updateScope"]:checked');
+      const isCategoryScope = scopeRadio && scopeRadio.value === 'category';
+
+      const catVal = isCategoryScope ? (document.getElementById('catalogCategorySelect')?.value || '').trim() : '';
+      const siteVal = isCategoryScope ? (document.getElementById('catalogSiteSelect')?.value || '').trim() : '';
+
+      // Prepare UI for execution
+      document.getElementById('updateAllControls').style.display = 'none';
+      document.getElementById('updateAllProgressSection').style.display = 'flex';
+      const startBtn = document.getElementById('btnStartUpdateAll');
+      startBtn.disabled = true;
+      startBtn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px; margin-right: 6px; display: inline-block;"></div> กำลังอัปเดต...';
+      document.getElementById('btnCancelUpdateAll').textContent = 'ยกเลิก';
+
+      const logBox = document.getElementById('updateAllLogBox');
+      logBox.innerHTML = '';
+
+      function appendLog(html) {
+        const line = document.createElement('div');
+        line.style.marginBottom = '4px';
+        line.innerHTML = html;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      currentUpdateAllAbortController = new AbortController();
+
+      const payload = {};
+      if (catVal) payload.category = catVal;
+      if (siteVal) payload.domain = siteVal;
+
+      let total = 0;
+      let checked = 0;
+      let updatedCount = 0;
+      let newEpsTotal = 0;
+      let upToDateCount = 0;
+
+      appendLog('<span style="color: var(--accent);">🚀 เริ่มต้นกระบวนการตรวจสอบและอัปเดตตอนใหม่...</span>');
+
+      try {
+        const resp = await fetch('/api/anime/update_all_stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: currentUpdateAllAbortController.signal
+        });
+
+        if (!resp.ok) {
+          throw new Error(`Server returned status ${resp.status}`);
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            const trimmed = part.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.replace(/^data:\s*/, '');
+            try {
+              const ev = JSON.parse(jsonStr);
+              if (ev.type === 'start') {
+                total = ev.total;
+                document.getElementById('statChecked').textContent = `0 / ${total}`;
+                document.getElementById('updateAllStatusText').textContent = `เตรียมตรวจสอบทั้งหมด ${total} เรื่อง...`;
+                appendLog(`📋 รายการที่จะตรวจสอบทั้งหมด: <strong>${total}</strong> เรื่อง`);
+              } else if (ev.type === 'checking') {
+                document.getElementById('updateAllStatusText').textContent = `กำลังตรวจสอบ (${ev.index}/${total}): ${ev.title}...`;
+                appendLog(`<span style="color: #94a3b8;">🔍 [${ev.index}/${total}] ตรวจสอบเว็บ: ${escapeHtml(ev.title)}</span>`);
+              } else if (ev.type === 'item_event') {
+                if (ev.event && ev.event.type === 'resolving') {
+                  appendLog(`<span style="color: #38bdf8;">  🎬 ${escapeHtml(ev.title)}: ตรวจพบตอนใหม่/ขาดวิดีโอ! กำลังดึงวิดีโอ (${ev.event.to_resolve_count} ตอน)...</span>`);
+                }
+              } else if (ev.type === 'item_done') {
+                checked = ev.index;
+                const pct = total > 0 ? Math.round((checked / total) * 100) : 100;
+                document.getElementById('updateAllProgressBar').style.width = pct + '%';
+                document.getElementById('updateAllPercentText').textContent = pct + '%';
+                document.getElementById('statChecked').textContent = `${checked} / ${total}`;
+
+                const r = ev.result || {};
+                if (r.status === 'updated') {
+                  updatedCount++;
+                  newEpsTotal += (r.new_episodes_added || 0);
+                  document.getElementById('statUpdated').textContent = updatedCount;
+                  document.getElementById('statNewEps').textContent = newEpsTotal;
+                  appendLog(`<span style="color: var(--success); font-weight: 600;">  🎉 [${escapeHtml(ev.title)}] อัปเดตสำเร็จ! เพิ่มตอนใหม่ ${r.new_episodes_added || 0} ตอน (รวม ${r.current_count} ตอน)</span>`);
+                } else if (r.status === 'up_to_date') {
+                  upToDateCount++;
+                  document.getElementById('statUpToDate').textContent = upToDateCount;
+                  appendLog(`<span style="color: #64748b;">  ✓ [${escapeHtml(ev.title)}] ล่าสุดแล้ว (${r.current_count} ตอน)</span>`);
+                } else if (r.status === 'skipped') {
+                  appendLog(`<span style="color: #eab308;">  ⚠️ [${escapeHtml(ev.title)}] ข้าม: ${r.message || 'ไม่มี source_url'}</span>`);
+                } else {
+                  appendLog(`<span style="color: var(--danger);">  ❌ [${escapeHtml(ev.title)}] ผิดพลาด: ${r.message || 'ไม่สามารถดึงข้อมูลได้'}</span>`);
+                }
+              } else if (ev.type === 'complete') {
+                document.getElementById('updateAllProgressBar').style.width = '100%';
+                document.getElementById('updateAllPercentText').textContent = '100%';
+                document.getElementById('updateAllStatusText').textContent = '🎉 ประมวลผลเสร็จสิ้นทุกรายการ!';
+                appendLog(`<hr style="border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 8px 0;" />`);
+                appendLog(`<span style="color: var(--accent); font-weight: 700;">✨ สรุปผลการอัปเดต: ตรวจสอบ ${total} เรื่อง | อัปเดตตอนใหม่สำเร็จ ${updatedCount} เรื่อง (เพิ่ม ${newEpsTotal} ตอน) | ล่าสุดแล้ว ${upToDateCount} เรื่อง</span>`);
+              }
+            } catch (err) {
+              console.error('SSE JSON parse error:', err, trimmed);
+            }
+          }
+        }
+
+        startBtn.style.display = 'none';
+        document.getElementById('btnCancelUpdateAll').textContent = 'เสร็จสิ้น';
+        showToast(`🎉 อัปเดตเสร็จสิ้น! เพิ่มตอนใหม่รวม ${newEpsTotal} ตอน (${updatedCount} เรื่อง)`);
+        loadCatalog();
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          appendLog('<span style="color: var(--warning);">🛑 การอัปเดตถูกยกเลิกโดยผู้ใช้</span>');
+          document.getElementById('updateAllStatusText').textContent = 'ยกเลิกการทำงานแล้ว';
+        } else {
+          appendLog(`<span style="color: var(--danger);">❌ เกิดข้อผิดพลาด: ${err.message}</span>`);
+          document.getElementById('updateAllStatusText').textContent = 'เกิดข้อผิดพลาด';
+        }
+        startBtn.style.display = 'inline-flex';
+        startBtn.disabled = false;
+        startBtn.innerHTML = 'ลองใหม่อีกครั้ง';
+        document.getElementById('btnCancelUpdateAll').textContent = 'ปิด';
+      } finally {
+        currentUpdateAllAbortController = null;
       }
     }
 
@@ -2468,10 +3050,13 @@
       if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบเรื่องนี้ (${slug})?`)) return;
 
       try {
-        const res = await fetch(`/api/anime/${slug}`, { method: 'DELETE' });
+        const res = await fetch(`/api/anime/${encodeURIComponent(slug)}`, { method: 'DELETE' });
         if (res.ok) {
           showToast('ลบเรียบร้อยแล้ว!');
           loadCatalog();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showToast('ลบไม่สำเร็จ: ' + (err.detail || res.statusText), 'error');
         }
       } catch (e) {
         showToast('ลบไม่สำเร็จ: ' + e, 'error');

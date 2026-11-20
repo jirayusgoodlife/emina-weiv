@@ -195,20 +195,41 @@ def get_all_anime() -> List[Dict[str, Any]]:
             result.append(a_dict)
         return result
 
+def _get_slug_candidates(slug: str) -> list[str]:
+    """Helper to generate slug variants (raw, unquoted, quoted) to handle encoded or special characters."""
+    import urllib.parse
+    candidates = []
+    if not slug:
+        return candidates
+    candidates.append(slug)
+    unquoted = urllib.parse.unquote(slug)
+    if unquoted not in candidates:
+        candidates.append(unquoted)
+    quoted = urllib.parse.quote(unquoted)
+    if quoted not in candidates:
+        candidates.append(quoted)
+    quoted_lower = quoted.lower()
+    if quoted_lower not in candidates:
+        candidates.append(quoted_lower)
+    return candidates
+
 def get_anime_by_slug(slug: str) -> Optional[Dict[str, Any]]:
+    variants = _get_slug_candidates(slug)
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM anime WHERE slug = ?", (slug,))
+        placeholders = ",".join(["?"] * len(variants))
+        cursor.execute(f"SELECT * FROM anime WHERE slug IN ({placeholders}) LIMIT 1", tuple(variants))
         row = cursor.fetchone()
         if not row:
             return None
         a_dict = dict(row)
+        matched_slug = a_dict["slug"]
         try:
             a_dict["genres"] = json.loads(a_dict["genres"]) if a_dict["genres"] else []
         except Exception:
             a_dict["genres"] = [g.strip() for g in a_dict["genres"].split(",") if g.strip()]
 
-        cursor.execute("SELECT * FROM episodes WHERE anime_slug = ? ORDER BY episode_number ASC", (slug,))
+        cursor.execute("SELECT * FROM episodes WHERE anime_slug = ? ORDER BY episode_number ASC", (matched_slug,))
         ep_rows = cursor.fetchall()
         a_dict["episodes"] = [dict(ep) for ep in ep_rows]
         return a_dict
@@ -330,10 +351,25 @@ def save_anime(data: Dict[str, Any]) -> Dict[str, Any]:
     return get_anime_by_slug(slug)
 
 def delete_anime(slug: str) -> bool:
+    variants = _get_slug_candidates(slug)
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM anime WHERE slug = ?", (slug,))
-        cursor.execute("DELETE FROM episodes WHERE anime_slug = ?", (slug,))
+        placeholders = ",".join(["?"] * len(variants))
+        # Find all actual slugs matching any variant
+        cursor.execute(f"SELECT slug FROM anime WHERE slug IN ({placeholders})", tuple(variants))
+        matched_rows = cursor.fetchall()
+        matched_slugs = [r["slug"] for r in matched_rows]
+
+        if not matched_slugs:
+            # Fallback direct delete attempt with original variants
+            cursor.execute(f"DELETE FROM anime WHERE slug IN ({placeholders})", tuple(variants))
+            cursor.execute(f"DELETE FROM episodes WHERE anime_slug IN ({placeholders})", tuple(variants))
+            conn.commit()
+            return cursor.rowcount > 0
+
+        del_placeholders = ",".join(["?"] * len(matched_slugs))
+        cursor.execute(f"DELETE FROM anime WHERE slug IN ({del_placeholders})", tuple(matched_slugs))
+        cursor.execute(f"DELETE FROM episodes WHERE anime_slug IN ({del_placeholders})", tuple(matched_slugs))
         conn.commit()
         return True
 
