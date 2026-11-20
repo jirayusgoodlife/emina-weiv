@@ -86,7 +86,7 @@ class UpdateService {
     } catch (e) {
       debugPrint('Error getting native app version: $e');
     }
-    return {'versionName': '1.3.4', 'versionCode': 13};
+    return {'versionName': '1.3.5', 'versionCode': 14};
   }
 
   /// Check GitHub Releases for newer release
