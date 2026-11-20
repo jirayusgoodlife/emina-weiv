@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show DeviceOrientation;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/pip_service.dart';
 
 /// ข้อมูลการตั้งค่าทั่วไปของแอปที่เก็บไว้ในเครื่อง (SharedPreferences)
 class SettingsProvider extends ChangeNotifier {
@@ -43,6 +44,11 @@ class SettingsProvider extends ChangeNotifier {
     if (savedVolume != null) {
       _playerVolume = savedVolume.clamp(0.0, 1.0);
     }
+
+    // Sync volume when hardware volume buttons are pressed
+    PipService.addVolumeListener((vol) {
+      setPlayerVolume(vol);
+    });
   }
 
   bool get showNextEpisodeButton => _showNextEpisodeButton;

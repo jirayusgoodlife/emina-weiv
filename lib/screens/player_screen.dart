@@ -136,6 +136,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       });
     }
 
+    PipService.addVolumeListener(_onSystemVolumeChanged);
+
     _initCurrentEpisode();
 
     // Auto save progress every 5 seconds
@@ -566,6 +568,27 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     setState(() {});
   }
 
+  void _onSystemVolumeChanged(double volume) {
+    if (!mounted) return;
+    if (_isDraggingVolume) return;
+
+    final clamped = volume.clamp(0.0, 1.0);
+    setState(() {
+      _currentVolume = clamped;
+      _showVolumeIndicator = true;
+    });
+    _settings?.setPlayerVolume(_currentVolume);
+
+    _indicatorHideTimer?.cancel();
+    _indicatorHideTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() {
+          _showVolumeIndicator = false;
+        });
+      }
+    });
+  }
+
   IconData get _brightnessIcon {
     if (_currentBrightness <= 0.05) return Icons.bedtime;
     if (_currentBrightness < 0.35) return Icons.brightness_low;
@@ -601,6 +624,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _isDisposed = true;
     _initEpoch++;
     WidgetsBinding.instance.removeObserver(this);
+    PipService.removeVolumeListener(_onSystemVolumeChanged);
     PipService.isPipMode.removeListener(_onPipModeChanged);
     PipService.setAutoPip(enabled: false);
     PipService.onPipAction = null;

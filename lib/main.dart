@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/in_app_stream_proxy.dart';
 import 'services/isar_service.dart';
+import 'services/pip_service.dart';
 import 'providers/anime_catalog_provider.dart';
 import 'providers/download_provider.dart';
 import 'providers/settings_provider.dart';
@@ -12,6 +13,9 @@ import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize PiP and system volume listeners
+  PipService.initialize();
 
   // Start internal In-App Stream Proxy (runs locally on 127.0.0.1 inside the phone)
   await InAppStreamProxy.instance.start();

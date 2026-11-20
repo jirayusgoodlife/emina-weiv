@@ -5,8 +5,20 @@ import 'package:flutter/services.dart';
 class PipService {
   static const MethodChannel _channel = MethodChannel('com.animeview.anime_view/pip');
   static final ValueNotifier<bool> isPipMode = ValueNotifier<bool>(false);
+  static final ValueNotifier<double?> systemVolume = ValueNotifier<double?>(null);
+  static final List<void Function(double volume)> _volumeListeners = [];
   static bool _handlerInitialized = false;
   static void Function(String action)? onPipAction;
+
+  static void addVolumeListener(void Function(double volume) listener) {
+    if (!_volumeListeners.contains(listener)) {
+      _volumeListeners.add(listener);
+    }
+  }
+
+  static void removeVolumeListener(void Function(double volume) listener) {
+    _volumeListeners.remove(listener);
+  }
 
   static void initialize() {
     if (_handlerInitialized) return;
@@ -27,8 +39,27 @@ class PipService {
         if (action != null) {
           onPipAction?.call(action);
         }
+      } else if (call.method == 'onVolumeChanged') {
+        final vol = (call.arguments as num?)?.toDouble();
+        if (vol != null) {
+          final clamped = vol.clamp(0.0, 1.0);
+          systemVolume.value = clamped;
+          for (final listener in List.of(_volumeListeners)) {
+            try {
+              listener(clamped);
+            } catch (e) {
+              if (kDebugMode) print('[PipService] volume listener error: $e');
+            }
+          }
+        }
       }
     });
+
+    if (Platform.isAndroid) {
+      getVolume().then((v) {
+        systemVolume.value = v;
+      });
+    }
   }
 
   /// Check if Picture-in-Picture is supported on the current device (Android 8.0+)

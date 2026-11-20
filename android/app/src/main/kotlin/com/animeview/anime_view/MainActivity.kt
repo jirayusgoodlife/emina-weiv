@@ -9,13 +9,17 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.database.ContentObserver
 import android.graphics.drawable.Icon
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.StatFs
 import android.provider.Settings
 import android.util.Rational
-import android.net.Uri
+import android.view.KeyEvent
 import java.io.File
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -42,6 +46,33 @@ class MainActivity : FlutterActivity() {
     private var aspectRatioNumerator = 16
     private var aspectRatioDenominator = 9
     private var isPlaying = true
+    private var volumeObserver: ContentObserver? = null
+    private var lastReportedVolume = -1.0
+
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
+                notifyVolumeChanged()
+            }
+        }
+    }
+
+    private fun getCurrentMusicVolume(): Double {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return 0.5
+        val current = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        return if (max > 0) current.toDouble() / max.toDouble() else 0.0
+    }
+
+    private fun notifyVolumeChanged() {
+        val vol = getCurrentMusicVolume()
+        if (Math.abs(vol - lastReportedVolume) > 0.001) {
+            lastReportedVolume = vol
+            runOnUiThread {
+                methodChannel?.invokeMethod("onVolumeChanged", vol)
+            }
+        }
+    }
 
     private val pipReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -63,12 +94,43 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        volumeControlStream = AudioManager.STREAM_MUSIC
+
         // Register PiP control broadcast receiver
         val filter = IntentFilter(ACTION_MEDIA_CONTROL)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(pipReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(pipReceiver, filter)
+        }
+
+        // Register Volume Change Receiver
+        val volFilter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(volumeReceiver, volFilter, Context.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(volumeReceiver, volFilter)
+            }
+        } catch (e: Exception) {
+            // fallback
+        }
+
+        // Register Volume ContentObserver
+        try {
+            volumeObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+                override fun onChange(selfChange: Boolean, uri: Uri?) {
+                    super.onChange(selfChange, uri)
+                    notifyVolumeChanged()
+                }
+            }
+            contentResolver.registerContentObserver(
+                Settings.System.CONTENT_URI,
+                true,
+                volumeObserver!!
+            )
+        } catch (e: Exception) {
+            // ignore
         }
 
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
@@ -180,6 +242,7 @@ class MainActivity : FlutterActivity() {
                     val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     val target = (volume.coerceIn(0f, 1f) * max).roundToInt()
+                    lastReportedVolume = if (max > 0) target.toDouble() / max.toDouble() else 0.0
                     am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
                     result.success(true)
                 }
@@ -513,6 +576,26 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            val handled = super.onKeyDown(keyCode, event)
+            window?.decorView?.postDelayed({
+                notifyVolumeChanged()
+            }, 30)
+            return handled
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            val handled = super.onKeyUp(keyCode, event)
+            notifyVolumeChanged()
+            return handled
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
     override fun onDestroy() {
         try {
             castService?.destroy()
@@ -522,6 +605,17 @@ class MainActivity : FlutterActivity() {
         }
         try {
             unregisterReceiver(pipReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        try {
+            unregisterReceiver(volumeReceiver)
+        } catch (e: Exception) {
+            // ignore
+        }
+        try {
+            volumeObserver?.let { contentResolver.unregisterContentObserver(it) }
+            volumeObserver = null
         } catch (e: Exception) {
             // ignore
         }
