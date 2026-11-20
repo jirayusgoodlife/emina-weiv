@@ -181,7 +181,9 @@ ${COMMITS_LOG}"
     fi
 fi
 
-if [ -t 0 ]; then
+if [ -n "${CUSTOM_RELEASE_NOTES:-}" ]; then
+    RELEASE_NOTES="$CUSTOM_RELEASE_NOTES"
+elif [ -t 0 ]; then
     echo -e "${BOLD}Release Notes preview:${NC}"
     echo "------------------------------------------------------"
     echo "$DEFAULT_NOTES"
