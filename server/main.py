@@ -861,20 +861,50 @@ def get_stream_proxy_headers(target_url: str) -> Dict[str, str]:
 
 # HLS Stream Stripping Proxy for anti-hotlinking / obfuscated video streams (animenani, 24playerhd, etc.)
 async def fetch_bytes_cmd(url: str, headers: Dict[str, str], timeout: int = 25) -> Optional[bytes]:
-    """Helper to fetch raw bytes (manifest or segment) via system curl if httpx fails or gets 403."""
+    """Helper to fetch raw bytes (manifest or segment) via system wget or curl if httpx fails or gets 403."""
     import shutil
-    if shutil.which("curl"):
-        cmd = ["curl", "-s", "-L", "-k", "--max-time", str(timeout)]
-        for k, v in headers.items():
-            cmd.extend(["-H", f"{k}: {v}"])
-        cmd.append(url)
+
+    # 1. Try wget first (consistently bypasses Cloudflare TLS fingerprinting on Linux)
+    if shutil.which("wget"):
         try:
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            cmd = ["wget", "-q", "-O", "-", f"--timeout={timeout}", "--no-check-certificate"]
+            for k, v in headers.items():
+                if k.lower() == "user-agent":
+                    cmd.append(f"--user-agent={v}")
+                else:
+                    cmd.append(f"--header={k}: {v}")
+            cmd.append(url)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
             stdout, _ = await proc.communicate()
             if proc.returncode == 0 and len(stdout) > 0:
-                return stdout
+                if b"<title>Attention Required" not in stdout[:500] and not (stdout.strip().startswith(b"<!DOCTYPE") and b"#EXTM3U" not in stdout):
+                    return stdout
+        except Exception as e:
+            print(f"[fetch_bytes_cmd] wget error: {e}")
+
+    # 2. Fallback to curl
+    if shutil.which("curl"):
+        try:
+            cmd = ["curl", "-s", "-L", "-k", "--max-time", str(timeout)]
+            for k, v in headers.items():
+                cmd.extend(["-H", f"{k}: {v}"])
+            cmd.append(url)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0 and len(stdout) > 0:
+                if b"<title>Attention Required" not in stdout[:500] and not (stdout.strip().startswith(b"<!DOCTYPE") and b"#EXTM3U" not in stdout):
+                    return stdout
         except Exception as e:
             print(f"[fetch_bytes_cmd] curl error: {e}")
+
     return None
 
 @app.api_route("/api/proxy/hls/manifest", methods=["GET", "HEAD", "OPTIONS"])
@@ -905,13 +935,15 @@ async def proxy_hls_manifest(url: str, request: Request):
         print(f"[ProxyHls] httpx error: {e}")
 
     if not raw_text or len(raw_text) < 10 or ("#EXTM3U" not in raw_text and not raw_text.strip().startswith("{")):
-        print(f"[ProxyHls] Trying curl fallback for manifest {url}...")
+        print(f"[ProxyHls] Trying wget/curl fallback for manifest {url}...")
         raw_bytes = await fetch_bytes_cmd(url, headers, timeout=20)
         if raw_bytes:
-            raw_text = raw_bytes.decode("utf-8", errors="ignore")
+            candidate = raw_bytes.decode("utf-8", errors="ignore")
+            if "#EXTM3U" in candidate or candidate.strip().startswith("{"):
+                raw_text = candidate
 
-    if not raw_text:
-        raise HTTPException(status_code=502, detail="Failed to fetch manifest")
+    if not raw_text or ("#EXTM3U" not in raw_text and not raw_text.strip().startswith("{")):
+        raise HTTPException(status_code=502, detail="Failed to fetch valid M3U8 manifest")
         
     trimmed = raw_text.strip()
     if trimmed.startswith("{") and '"p"' in trimmed:
@@ -994,12 +1026,12 @@ async def proxy_hls_segment(url: str, request: Request):
     except Exception as e:
         print(f"[ProxySegment] httpx error: {e}")
 
-    if not data or len(data) < 40:
+    if not data or len(data) < 40 or b"<title>Attention Required" in data[:500] or (data.strip().startswith(b"<!DOCTYPE") and data[:1] != b"G"):
         raw_bytes = await fetch_bytes_cmd(url, headers, timeout=25)
         if raw_bytes and len(raw_bytes) > 40:
             data = raw_bytes
 
-    if not data:
+    if not data or (data.strip().startswith(b"<!DOCTYPE") and data[:1] != b"G"):
         raise HTTPException(status_code=502, detail="Failed to fetch segment")
 
     # Dynamic MPEG-TS sync byte stripping for fake PNG/WebP headers (Animenani, 24playerhd, etc.)
