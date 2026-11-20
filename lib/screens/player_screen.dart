@@ -1118,13 +1118,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     setState(() {
       _isLocked = true;
       _showControls = false;
+      _showUnlockSlider = false;
       _showBrightnessIndicator = false;
       _showVolumeIndicator = false;
       _showSeekPreview = false;
       _showDoubleTapFeedback = false;
     });
     _hideTimer?.cancel();
-    _showUnlockPrompt();
+    _unlockSliderHideTimer?.cancel();
   }
 
   void _showUnlockPrompt() {
@@ -1660,7 +1661,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
               // Slide to Unlock UI (when screen is locked)
               if (_isLocked && !_isLoading && _errorMessage == null)
-                _buildSlideToUnlock(),
+                _buildSlideToUnlock(isLandscape: isLandscape),
             ],
           ),
         ),
@@ -2698,180 +2699,181 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     );
   }
 
-  Widget _buildSlideToUnlock() {
-    const trackWidth = 260.0;
-    const trackHeight = 52.0;
-    const thumbSize = 44.0;
+  Widget _buildSlideToUnlock({required bool isLandscape}) {
+    const trackWidth = 250.0;
+    const trackHeight = 48.0;
+    const thumbSize = 40.0;
     final maxDragDistance = trackWidth - thumbSize - 8.0;
 
-    return Center(
-      child: AnimatedOpacity(
-        opacity: _showUnlockSlider ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 250),
-        child: IgnorePointer(
-          ignoring: !_showUnlockSlider,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xDD10141E),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.amber.withOpacity(0.6), width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 10,
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: isLandscape ? 24 : 44,
+      child: SafeArea(
+        child: Center(
+          child: AnimatedOpacity(
+            opacity: _showUnlockSlider ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 250),
+            child: IgnorePointer(
+              ignoring: !_showUnlockSlider,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Subtle Translucent Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.amber.withOpacity(0.4), width: 1.0),
                     ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.lock_rounded, color: Colors.amber, size: 16),
-                    SizedBox(width: 6),
-                    Text(
-                      'หน้าจอล็อกอยู่',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Slider Track
-              Container(
-                width: trackWidth,
-                height: trackHeight,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: const Color(0xEE161B26),
-                  borderRadius: BorderRadius.circular(trackHeight / 2),
-                  border: Border.all(color: Colors.white24, width: 1.2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    // Background progress highlight
-                    Positioned(
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: thumbSize + (_unlockDragProgress * maxDragDistance),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.amber.withOpacity(0.25),
-                              AppTheme.accent.withOpacity(0.45),
-                            ],
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.lock_rounded, color: Colors.amber, size: 13),
+                        SizedBox(width: 5),
+                        Text(
+                          'หน้าจอล็อกอยู่',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
                           ),
-                          borderRadius: BorderRadius.circular(trackHeight / 2),
                         ),
-                      ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 8),
 
-                    // Centered Text Label
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 36),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'เลื่อนเพื่อปลดล็อก',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(
-                                  (1.0 - _unlockDragProgress * 1.5).clamp(0.2, 0.9),
+                  // Slider Track (Semi-transparent translucent glass style)
+                  Container(
+                    width: trackWidth,
+                    height: trackHeight,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.38),
+                      borderRadius: BorderRadius.circular(trackHeight / 2),
+                      border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      alignment: Alignment.centerLeft,
+                      children: [
+                        // Background progress highlight
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: thumbSize + (_unlockDragProgress * maxDragDistance),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.amber.withOpacity(0.20),
+                                  AppTheme.accent.withOpacity(0.35),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(trackHeight / 2),
+                            ),
+                          ),
+                        ),
+
+                        // Centered Text Label
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'เลื่อนเพื่อปลดล็อก',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(
+                                      (1.0 - _unlockDragProgress * 1.5).clamp(0.25, 0.95),
+                                    ),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
+                                  ),
                                 ),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.keyboard_double_arrow_right_rounded,
+                                  size: 16,
+                                  color: Colors.white.withOpacity(
+                                    (1.0 - _unlockDragProgress * 1.5).clamp(0.25, 0.85),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.keyboard_double_arrow_right_rounded,
-                              size: 18,
-                              color: Colors.white.withOpacity(
-                                (1.0 - _unlockDragProgress * 1.5).clamp(0.2, 0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Draggable Thumb
-                    Positioned(
-                      left: _unlockDragProgress * maxDragDistance,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onHorizontalDragUpdate: (details) {
-                          _unlockSliderHideTimer?.cancel();
-                          final newDist = (_unlockDragProgress * maxDragDistance) + details.delta.dx;
-                          final newProgress = (newDist / maxDragDistance).clamp(0.0, 1.0);
-                          setState(() {
-                            _unlockDragProgress = newProgress;
-                          });
-
-                          if (_unlockDragProgress >= 0.88) {
-                            _unlockScreen();
-                          }
-                        },
-                        onHorizontalDragEnd: (_) {
-                          if (_unlockDragProgress < 0.88) {
-                            setState(() {
-                              _unlockDragProgress = 0.0;
-                            });
-                            _showUnlockPrompt();
-                          }
-                        },
-                        child: Container(
-                          width: thumbSize,
-                          height: thumbSize,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Colors.amber, Color(0xFFFFB300)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.amber.withOpacity(0.6),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            _unlockDragProgress >= 0.88
-                                ? Icons.lock_open_rounded
-                                : Icons.lock_rounded,
-                            color: Colors.black87,
-                            size: 22,
                           ),
                         ),
-                      ),
+
+                        // Draggable Thumb
+                        Positioned(
+                          left: _unlockDragProgress * maxDragDistance,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onHorizontalDragUpdate: (details) {
+                              _unlockSliderHideTimer?.cancel();
+                              final newDist = (_unlockDragProgress * maxDragDistance) + details.delta.dx;
+                              final newProgress = (newDist / maxDragDistance).clamp(0.0, 1.0);
+                              setState(() {
+                                _unlockDragProgress = newProgress;
+                              });
+
+                              if (_unlockDragProgress >= 0.88) {
+                                _unlockScreen();
+                              }
+                            },
+                            onHorizontalDragEnd: (_) {
+                              if (_unlockDragProgress < 0.88) {
+                                setState(() {
+                                  _unlockDragProgress = 0.0;
+                                });
+                                _showUnlockPrompt();
+                              }
+                            },
+                            child: Container(
+                              width: thumbSize,
+                              height: thumbSize,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Colors.amber, Color(0xFFFFB300)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.amber.withOpacity(0.5),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                _unlockDragProgress >= 0.88
+                                    ? Icons.lock_open_rounded
+                                    : Icons.lock_rounded,
+                                color: Colors.black87,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
