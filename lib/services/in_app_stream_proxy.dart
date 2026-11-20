@@ -52,6 +52,9 @@ class InAppStreamProxy {
         lower.contains('surrit') ||
         lower.contains('njavtv') ||
         lower.contains('missav') ||
+        lower.contains('b-cdn') ||
+        lower.contains('bunnycdn') ||
+        lower.contains('fourhoi') ||
         lower.endsWith('.txt') ||
         lower.contains('/o/');
   }
@@ -73,10 +76,15 @@ class InAppStreamProxy {
     }
 
     // 2. Built-in defaults
-    if (lower.contains('surrit') || lower.contains('njavtv') || lower.contains('missav')) {
+    if (lower.contains('surrit') ||
+        lower.contains('njavtv') ||
+        lower.contains('missav') ||
+        lower.contains('b-cdn') ||
+        lower.contains('bunnycdn') ||
+        lower.contains('fourhoi')) {
       return {
         'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
         'Referer': 'https://njavtv.com/',
         'Origin': 'https://njavtv.com',
         'Accept': '*/*',

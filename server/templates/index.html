@@ -3090,18 +3090,28 @@
       const modalTitle = document.getElementById('videoModalTitle');
       modalTitle.textContent = title || 'ทดสอบสตรีมวิดีโอ';
 
-      if (currentHlsInstance) {
-        currentHlsInstance.destroy();
-        currentHlsInstance = null;
-      }
-      video.pause();
-      video.src = '';
-
-      let playableUrl = streamUrl;
       const lower = streamUrl.toLowerCase();
 
       // Check built-in proxy sites
-      let needsProxy = lower.includes('animenani') || lower.includes('24playerhd') || lower.includes('orbitalkthai') || lower.includes('stream-aph') || lower.includes('qqhls') || lower.includes('flower.txt') || lower.includes('/o/') || lower.includes('maimeorder') || lower.includes('animemami') || lower.includes('getplay-cdn') || lower.includes('ok-hd') || lower.includes('ok-720') || lower.includes('surrit') || lower.includes('njavtv') || lower.includes('missav') || lower.endsWith('.txt');
+      let needsProxy = lower.includes('animenani') ||
+        lower.includes('24playerhd') ||
+        lower.includes('orbitalkthai') ||
+        lower.includes('stream-aph') ||
+        lower.includes('qqhls') ||
+        lower.includes('flower.txt') ||
+        lower.includes('/o/') ||
+        lower.includes('maimeorder') ||
+        lower.includes('animemami') ||
+        lower.includes('getplay-cdn') ||
+        lower.includes('ok-hd') ||
+        lower.includes('ok-720') ||
+        lower.includes('surrit') ||
+        lower.includes('njavtv') ||
+        lower.includes('missav') ||
+        lower.includes('b-cdn') ||
+        lower.includes('bunnycdn') ||
+        lower.includes('fourhoi') ||
+        lower.endsWith('.txt');
 
       // Check dynamic proxy rules from custom_sites
       if (!needsProxy && customSitesData && customSitesData.length > 0) {
@@ -3122,37 +3132,52 @@
         }
       }
 
-      if (needsProxy) {
-        playableUrl = `/api/proxy/hls/manifest?url=${encodeURIComponent(streamUrl)}`;
-      }
+      function loadStream(urlToPlay, isProxyActive) {
+        if (currentHlsInstance) {
+          currentHlsInstance.destroy();
+          currentHlsInstance = null;
+        }
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
 
-      const isHls = needsProxy || playableUrl.includes('.m3u8') || playableUrl.includes('/proxy/hls/manifest') || playableUrl.includes('flower.txt') || lower.endsWith('.txt');
+        const isHls = urlToPlay.includes('.m3u8') || urlToPlay.includes('/proxy/hls/manifest') || urlToPlay.includes('flower.txt') || urlToPlay.toLowerCase().endsWith('.txt');
 
-      if (isHls && window.Hls && Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-        });
-        hls.loadSource(playableUrl);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (isHls && window.Hls && Hls.isSupported()) {
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+          });
+          hls.loadSource(urlToPlay);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(() => {});
+          });
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            console.error('[HLS Error]', data);
+            if (data.fatal) {
+              if (!isProxyActive && !urlToPlay.includes('/api/proxy/hls/manifest')) {
+                console.warn('[HLS] Direct playback failed with', data.details, 'retrying via server proxy...');
+                showToast('สตรีมตรงติดขัด กำลังเปลี่ยนไปโหลดผ่าน Server Proxy...', 'info');
+                const proxyUrl = `/api/proxy/hls/manifest?url=${encodeURIComponent(streamUrl)}`;
+                loadStream(proxyUrl, true);
+              } else {
+                showToast('HLS Stream Error: ' + (data.details || data.type), 'error');
+              }
+            }
+          });
+          currentHlsInstance = hls;
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = urlToPlay;
           video.play().catch(() => {});
-        });
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('[HLS Error]', data);
-          if (data.fatal) {
-            showToast('HLS Stream Error: ' + (data.details || data.type), 'error');
-          }
-        });
-        currentHlsInstance = hls;
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = playableUrl;
-        video.play().catch(() => {});
-      } else {
-        video.src = playableUrl;
-        video.play().catch(() => {});
+        } else {
+          video.src = urlToPlay;
+          video.play().catch(() => {});
+        }
       }
 
+      const initialUrl = needsProxy ? `/api/proxy/hls/manifest?url=${encodeURIComponent(streamUrl)}` : streamUrl;
+      loadStream(initialUrl, needsProxy);
       modal.classList.add('open');
     }
 

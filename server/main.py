@@ -860,81 +860,165 @@ def get_stream_proxy_headers(target_url: str) -> Dict[str, str]:
     }
 
 # HLS Stream Stripping Proxy for anti-hotlinking / obfuscated video streams (animenani, 24playerhd, etc.)
-@app.api_route("/api/proxy/hls/manifest", methods=["GET", "HEAD"])
+async def fetch_bytes_cmd(url: str, headers: Dict[str, str], timeout: int = 25) -> Optional[bytes]:
+    """Helper to fetch raw bytes (manifest or segment) via system curl if httpx fails or gets 403."""
+    import shutil
+    if shutil.which("curl"):
+        cmd = ["curl", "-s", "-L", "-k", "--max-time", str(timeout)]
+        for k, v in headers.items():
+            cmd.extend(["-H", f"{k}: {v}"])
+        cmd.append(url)
+        try:
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0 and len(stdout) > 0:
+                return stdout
+        except Exception as e:
+            print(f"[fetch_bytes_cmd] curl error: {e}")
+    return None
+
+@app.api_route("/api/proxy/hls/manifest", methods=["GET", "HEAD", "OPTIONS"])
 async def proxy_hls_manifest(url: str, request: Request):
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        })
+    raw_query = str(request.url.query)
+    if "url=" in raw_query:
+        target_param = raw_query.split("url=", 1)[1]
+        if "://" in target_param and "&" in target_param:
+            import urllib.parse
+            url = urllib.parse.unquote(target_param)
+
     headers = get_stream_proxy_headers(url)
-    async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
-        r = await client.get(url, headers=headers)
-        if r.status_code != 200:
-            raise HTTPException(status_code=r.status_code, detail="Failed to fetch manifest")
-        
-        raw_text = r.text
-        trimmed = raw_text.strip()
-        if trimmed.startswith("{") and '"p"' in trimmed:
-            try:
-                parsed = json.loads(trimmed)
-                if isinstance(parsed, dict) and "p" in parsed:
-                    import base64
-                    p_str = parsed["p"].replace("\n", "").replace("\r", "").strip()
-                    raw_text = base64.b64decode(p_str).decode("utf-8", errors="ignore")
-            except Exception as e:
-                print(f"[ProxyHls] Error decoding base64 manifest: {e}")
-
-        # Rewrite lines in manifest
-        lines = raw_text.splitlines()
-        new_lines = []
-        import urllib.parse
-        host = request.headers.get("host") or "127.0.0.1:8800"
-        scheme = request.url.scheme
-        base_proxy = f"{scheme}://{host}/api/proxy/hls"
-
-        last_tag = ""
-        for line in lines:
-            line_str = line.strip()
-            if not line_str or line_str.startswith("#"):
-                if line_str.startswith("#EXTINF"):
-                    last_tag = "EXTINF"
-                elif line_str.startswith("#EXT-X-STREAM-INF") or line_str.startswith("#EXT-X-MEDIA"):
-                    last_tag = "STREAM-INF"
-                new_lines.append(line)
+    raw_text = None
+    try:
+        async with httpx.AsyncClient(timeout=15.0, verify=False) as client:
+            r = await client.get(url, headers=headers)
+            if r.status_code == 200:
+                raw_text = r.text
             else:
-                target_url = urllib.parse.urljoin(url, line_str)
-                path = urllib.parse.urlparse(target_url).path.lower()
-                is_seg = (
-                    last_tag == "EXTINF"
-                    or any(path.endswith(ext) for ext in [".webp", ".ts", ".m4s", ".mp4", ".png", ".jpg", ".jpeg"])
-                    or ".webp" in line_str
-                    or ".ts" in line_str
-                    or ".jpeg" in line_str
-                    or "/file/hls" in line_str
-                )
-                encoded = urllib.parse.quote(target_url, safe="")
-                if is_seg:
-                    new_lines.append(f"{base_proxy}/segment?url={encoded}")
-                else:
-                    new_lines.append(f"{base_proxy}/manifest?url={encoded}")
+                print(f"[ProxyHls] Upstream status {r.status_code} for {url}")
+    except Exception as e:
+        print(f"[ProxyHls] httpx error: {e}")
 
-        content = "\n".join(new_lines)
-        return Response(content=content, media_type="application/vnd.apple.mpegurl")
+    if not raw_text or len(raw_text) < 10 or ("#EXTM3U" not in raw_text and not raw_text.strip().startswith("{")):
+        print(f"[ProxyHls] Trying curl fallback for manifest {url}...")
+        raw_bytes = await fetch_bytes_cmd(url, headers, timeout=20)
+        if raw_bytes:
+            raw_text = raw_bytes.decode("utf-8", errors="ignore")
 
-@app.api_route("/api/proxy/hls/segment", methods=["GET", "HEAD"])
-async def proxy_hls_segment(url: str):
+    if not raw_text:
+        raise HTTPException(status_code=502, detail="Failed to fetch manifest")
+        
+    trimmed = raw_text.strip()
+    if trimmed.startswith("{") and '"p"' in trimmed:
+        try:
+            parsed = json.loads(trimmed)
+            if isinstance(parsed, dict) and "p" in parsed:
+                import base64
+                p_str = parsed["p"].replace("\n", "").replace("\r", "").strip()
+                raw_text = base64.b64decode(p_str).decode("utf-8", errors="ignore")
+        except Exception as e:
+            print(f"[ProxyHls] Error decoding base64 manifest: {e}")
+
+    # Rewrite lines in manifest
+    lines = raw_text.splitlines()
+    new_lines = []
+    import urllib.parse
+    base_proxy = "/api/proxy/hls"
+
+    last_tag = ""
+    for line in lines:
+        line_str = line.strip()
+        if not line_str or line_str.startswith("#"):
+            if line_str.startswith("#EXTINF"):
+                last_tag = "EXTINF"
+            elif line_str.startswith("#EXT-X-STREAM-INF") or line_str.startswith("#EXT-X-MEDIA"):
+                last_tag = "STREAM-INF"
+            new_lines.append(line)
+        else:
+            target_url = urllib.parse.urljoin(url, line_str)
+            path = urllib.parse.urlparse(target_url).path.lower()
+            is_seg = (
+                last_tag == "EXTINF"
+                or any(path.endswith(ext) for ext in [".webp", ".ts", ".m4s", ".mp4", ".png", ".jpg", ".jpeg"])
+                or ".webp" in line_str
+                or ".ts" in line_str
+                or ".jpeg" in line_str
+                or "/file/hls" in line_str
+            )
+            encoded = urllib.parse.quote(target_url, safe="")
+            if is_seg:
+                new_lines.append(f"{base_proxy}/segment?url={encoded}")
+            else:
+                new_lines.append(f"{base_proxy}/manifest?url={encoded}")
+
+    content = "\n".join(new_lines)
+    return Response(
+        content=content,
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.api_route("/api/proxy/hls/segment", methods=["GET", "HEAD", "OPTIONS"])
+async def proxy_hls_segment(url: str, request: Request):
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        })
+    raw_query = str(request.url.query)
+    if "url=" in raw_query:
+        target_param = raw_query.split("url=", 1)[1]
+        if "://" in target_param and "&" in target_param:
+            import urllib.parse
+            url = urllib.parse.unquote(target_param)
+
     headers = get_stream_proxy_headers(url)
-    async with httpx.AsyncClient(timeout=25.0, verify=False) as client:
-        r = await client.get(url, headers=headers)
-        if r.status_code != 200:
-            raise HTTPException(status_code=r.status_code, detail="Failed to fetch segment")
+    data = None
+    try:
+        async with httpx.AsyncClient(timeout=25.0, verify=False) as client:
+            r = await client.get(url, headers=headers)
+            if r.status_code == 200:
+                data = r.content
+            else:
+                print(f"[ProxySegment] Upstream status {r.status_code} for {url}")
+    except Exception as e:
+        print(f"[ProxySegment] httpx error: {e}")
 
-        data = r.content
-        # Dynamic MPEG-TS sync byte stripping for fake PNG/WebP headers (Animenani, 24playerhd, etc.)
-        if len(data) > 40 and data[0] != 0x47:
-            limit = min(len(data) - 376, 16000)
-            for i in range(limit):
-                if data[i] == 0x47 and data[i + 188] == 0x47 and data[i + 376] == 0x47:
-                    data = data[i:]
-                    break
+    if not data or len(data) < 40:
+        raw_bytes = await fetch_bytes_cmd(url, headers, timeout=25)
+        if raw_bytes and len(raw_bytes) > 40:
+            data = raw_bytes
 
-        return Response(content=data, media_type="video/MP2T")
+    if not data:
+        raise HTTPException(status_code=502, detail="Failed to fetch segment")
+
+    # Dynamic MPEG-TS sync byte stripping for fake PNG/WebP headers (Animenani, 24playerhd, etc.)
+    if len(data) > 40 and data[0] != 0x47:
+        limit = min(len(data) - 376, 16000)
+        for i in range(limit):
+            if data[i] == 0x47 and data[i + 188] == 0x47 and data[i + 376] == 0x47:
+                data = data[i:]
+                break
+
+    return Response(
+        content=data,
+        media_type="video/MP2T",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 @app.get("/robots.txt")
 def get_robots():

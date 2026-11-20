@@ -177,6 +177,17 @@ def build_proxy_rules_for_sync(custom_sites: Optional[List[Dict[str, Any]]] = No
         },
         "strip_fake_headers": False
     })
+    rules.append({
+        "name": "BunnyCDN / b-cdn",
+        "match_domains": ["b-cdn.net", "b-cdn", "bunnycdn"],
+        "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            "Referer": "https://njavtv.com/",
+            "Origin": "https://njavtv.com",
+            "Accept": "*/*"
+        },
+        "strip_fake_headers": False
+    })
 
     # 2. Dynamic custom sites proxy rules
     for site in custom_sites:
