@@ -20,6 +20,8 @@ import '../widgets/cast_button.dart';
 import '../theme/app_theme.dart';
 import '../widgets/settings_sheet.dart';
 
+enum _GestureDragAxis { none, horizontal, vertical }
+
 class PlayerScreen extends StatefulWidget {
   final AnimeCollection anime;
   final int initialEpisodeIndex;
@@ -58,7 +60,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _isCasting = false;
   SettingsProvider? _settings;
 
-  // Gesture controls (Left = Brightness, Right = Volume)
+  // Gesture controls (Left = Brightness, Right = Volume, Horizontal = Seek)
   double _currentBrightness = 0.5;
   double _currentVolume = 0.5;
   bool _isDraggingBrightness = false;
@@ -67,7 +69,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showVolumeIndicator = false;
   Timer? _indicatorHideTimer;
   bool _lastReportedPlaying = false;
+  double _lastLongPressX = 0.0;
   double _lastLongPressY = 0.0;
+  Offset _longPressStartPos = Offset.zero;
+  _GestureDragAxis _dragAxis = _GestureDragAxis.none;
 
   // Screen lock controls
   bool _isLocked = false;
@@ -411,38 +416,89 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _onLongPressStart(LongPressStartDetails details) {
     if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
-    final width = MediaQuery.of(context).size.width;
     _indicatorHideTimer?.cancel();
+    _seekPreviewHideTimer?.cancel();
+    _longPressStartPos = details.globalPosition;
+    _lastLongPressX = details.globalPosition.dx;
     _lastLongPressY = details.globalPosition.dy;
+    _dragAxis = _GestureDragAxis.none;
     HapticFeedback.selectionClick();
-
-    if (details.globalPosition.dx < width / 2) {
-      // Left side: Brightness
-      _isDraggingBrightness = true;
-      _isDraggingVolume = false;
-      _showBrightnessIndicator = true;
-      _showVolumeIndicator = false;
-    } else {
-      // Right side: Volume
-      _isDraggingVolume = true;
-      _isDraggingBrightness = false;
-      _showVolumeIndicator = true;
-      _showBrightnessIndicator = false;
-    }
-    setState(() {});
   }
 
   void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
-    if (!_isDraggingBrightness && !_isDraggingVolume) return;
-    final height = MediaQuery.of(context).size.height;
-    final deltaY = _lastLongPressY - details.globalPosition.dy;
-    _lastLongPressY = details.globalPosition.dy;
-    final delta = deltaY / (height * 0.6);
+    if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
 
-    if (_isDraggingBrightness) {
-      _updateBrightness((_currentBrightness + delta).clamp(0.0, 1.0));
-    } else if (_isDraggingVolume) {
-      _updateVolume((_currentVolume + delta).clamp(0.0, 1.0));
+    if (_dragAxis == _GestureDragAxis.none) {
+      final deltaX = (details.globalPosition.dx - _longPressStartPos.dx).abs();
+      final deltaY = (details.globalPosition.dy - _longPressStartPos.dy).abs();
+      const threshold = 8.0;
+      if (deltaX < threshold && deltaY < threshold) return;
+
+      if (deltaX > deltaY) {
+        // Horizontal Seek: require long-press first just like vertical controls
+        final c = _controller;
+        if (c == null || !c.value.isInitialized || c.value.duration <= Duration.zero) return;
+        _dragAxis = _GestureDragAxis.horizontal;
+        _isDraggingSeek = true;
+        _seekStartPosition = c.value.position;
+        _seekTargetPosition = _seekStartPosition;
+        _showSeekPreview = true;
+        _lastLongPressX = _longPressStartPos.dx;
+        _lastLongPressY = _longPressStartPos.dy;
+        _startHideTimer();
+      } else {
+        // Vertical Brightness / Volume
+        _dragAxis = _GestureDragAxis.vertical;
+        final width = MediaQuery.of(context).size.width;
+        if (_longPressStartPos.dx < width / 2) {
+          // Left side: Brightness
+          _isDraggingBrightness = true;
+          _isDraggingVolume = false;
+          _showBrightnessIndicator = true;
+          _showVolumeIndicator = false;
+        } else {
+          // Right side: Volume
+          _isDraggingVolume = true;
+          _isDraggingBrightness = false;
+          _showVolumeIndicator = true;
+          _showBrightnessIndicator = false;
+        }
+        _lastLongPressX = _longPressStartPos.dx;
+        _lastLongPressY = _longPressStartPos.dy;
+        _indicatorHideTimer?.cancel();
+      }
+    }
+
+    if (_dragAxis == _GestureDragAxis.horizontal && _isDraggingSeek) {
+      final c = _controller;
+      if (c == null || !c.value.isInitialized) return;
+      final dur = c.value.duration;
+      if (dur <= Duration.zero) return;
+
+      final width = MediaQuery.of(context).size.width;
+      // Dragging across the screen scrolls ~180s for longer anime, 90s for shorter
+      final scrubWindowSeconds = dur.inSeconds > 600 ? 180.0 : 90.0;
+      final deltaX = details.globalPosition.dx - _lastLongPressX;
+      _lastLongPressX = details.globalPosition.dx;
+      final deltaSeconds = (deltaX / width) * scrubWindowSeconds;
+      final newMs = (_seekTargetPosition.inMilliseconds + (deltaSeconds * 1000).toInt())
+          .clamp(0, dur.inMilliseconds);
+
+      _seekTargetPosition = Duration(milliseconds: newMs);
+      _startHideTimer();
+      setState(() {});
+    } else if (_dragAxis == _GestureDragAxis.vertical) {
+      if (!_isDraggingBrightness && !_isDraggingVolume) return;
+      final height = MediaQuery.of(context).size.height;
+      final deltaY = _lastLongPressY - details.globalPosition.dy;
+      _lastLongPressY = details.globalPosition.dy;
+      final delta = deltaY / (height * 0.6);
+
+      if (_isDraggingBrightness) {
+        _updateBrightness((_currentBrightness + delta).clamp(0.0, 1.0));
+      } else if (_isDraggingVolume) {
+        _updateVolume((_currentVolume + delta).clamp(0.0, 1.0));
+      }
     }
   }
 
@@ -455,80 +511,42 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _endLongPressGesture() {
-    _isDraggingBrightness = false;
-    _isDraggingVolume = false;
-    _indicatorHideTimer?.cancel();
-    _indicatorHideTimer = Timer(const Duration(milliseconds: 1200), () {
-      if (mounted) {
-        setState(() {
-          _showBrightnessIndicator = false;
-          _showVolumeIndicator = false;
-        });
+    if (_isDraggingSeek) {
+      _isDraggingSeek = false;
+      final c = _controller;
+      if (c != null && c.value.isInitialized) {
+        c.seekTo(_seekTargetPosition);
+        // Continuous playback: keep playing seamlessly from the scrubbed position!
+        if (!c.value.isPlaying) {
+          c.play();
+        }
       }
-    });
-  }
-
-  void _onHorizontalDragStart(DragStartDetails details) {
-    if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
-    final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
-    final dur = c.value.duration;
-    if (dur <= Duration.zero) return;
-
-    _seekPreviewHideTimer?.cancel();
-    _isDraggingSeek = true;
-    _seekStartPosition = c.value.position;
-    _seekTargetPosition = _seekStartPosition;
-    _showSeekPreview = true;
-    _startHideTimer();
-    setState(() {});
-  }
-
-  void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_isDraggingSeek) return;
-    final c = _controller;
-    if (c == null || !c.value.isInitialized) return;
-    final dur = c.value.duration;
-    if (dur <= Duration.zero) return;
-
-    final width = MediaQuery.of(context).size.width;
-    // Dragging across the screen scrolls ~180s for longer anime, 90s for shorter
-    final scrubWindowSeconds = dur.inSeconds > 600 ? 180.0 : 90.0;
-    final deltaSeconds = (details.delta.dx / width) * scrubWindowSeconds;
-    final newMs = (_seekTargetPosition.inMilliseconds + (deltaSeconds * 1000).toInt())
-        .clamp(0, dur.inMilliseconds);
-
-    _seekTargetPosition = Duration(milliseconds: newMs);
-    _startHideTimer();
-    setState(() {});
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (!_isDraggingSeek) return;
-    _isDraggingSeek = false;
-    final c = _controller;
-    if (c != null && c.value.isInitialized) {
-      c.seekTo(_seekTargetPosition);
-      // Continuous playback: keep playing seamlessly from the scrubbed position!
-      if (!c.value.isPlaying) {
-        c.play();
-      }
+      _seekPreviewHideTimer?.cancel();
+      _seekPreviewHideTimer = Timer(const Duration(milliseconds: 700), () {
+        if (mounted) {
+          setState(() {
+            _showSeekPreview = false;
+          });
+        }
+      });
+      _startHideTimer();
     }
-    _seekPreviewHideTimer?.cancel();
-    _seekPreviewHideTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) {
-        setState(() {
-          _showSeekPreview = false;
-        });
-      }
-    });
-    _startHideTimer();
-    setState(() {});
-  }
 
-  void _onHorizontalDragCancel() {
-    _isDraggingSeek = false;
-    _showSeekPreview = false;
+    if (_isDraggingBrightness || _isDraggingVolume) {
+      _isDraggingBrightness = false;
+      _isDraggingVolume = false;
+      _indicatorHideTimer?.cancel();
+      _indicatorHideTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() {
+            _showBrightnessIndicator = false;
+            _showVolumeIndicator = false;
+          });
+        }
+      });
+    }
+
+    _dragAxis = _GestureDragAxis.none;
     setState(() {});
   }
 
@@ -1375,10 +1393,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           onLongPressMoveUpdate: _onLongPressMoveUpdate,
           onLongPressEnd: _onLongPressEnd,
           onLongPressUp: _onLongPressUp,
-          onHorizontalDragStart: _onHorizontalDragStart,
-          onHorizontalDragUpdate: _onHorizontalDragUpdate,
-          onHorizontalDragEnd: _onHorizontalDragEnd,
-          onHorizontalDragCancel: _onHorizontalDragCancel,
+          onLongPressCancel: _endLongPressGesture,
           behavior: HitTestBehavior.opaque,
           child: Stack(
             fit: StackFit.expand,
