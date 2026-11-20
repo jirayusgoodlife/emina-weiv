@@ -157,6 +157,9 @@ class NJavTvHandler(BaseSiteHandler):
         # Slug
         parsed = urlparse(url)
         slug = parsed.path.strip("/").split("/")[-1]
+        if not slug or slug in ("th", "en", "ja", "ko", "cn"):
+            clean_path = parsed.path.strip("/").replace("/", "-")
+            slug = f"njav-{clean_path}" if clean_path else "njav-home"
         if not slug:
             slug = re.sub(r"[^a-zA-Z0-9]+", "-", (code or title).lower()).strip("-")
 
@@ -180,9 +183,92 @@ class NJavTvHandler(BaseSiteHandler):
             if og_desc and og_desc.get("content"):
                 synopsis = og_desc["content"]
 
-        # Stream resolution right away if present in page
+        # Check if single video page
         stream_url = self._extract_stream_from_html(html) or ""
+        v_player = soup.find("video", class_="player")
+        is_single_video = bool(stream_url or v_player or code)
 
+        if not is_single_video:
+            # Check if this is a listing / catalog / category / homepage
+            seen_urls = set()
+            listing_episodes = []
+            for a in soup.find_all('a', href=True):
+                href = a['href']
+                m_code = re.search(r'https?://njavtv\.com/(?:dm\d+/)?(?:(?:en|th|ja|cn|zh-Hant|zh-Hans|ko)/)?([a-zA-Z0-9]+-[0-9]+[a-zA-Z0-9-]*)', href)
+                if not m_code:
+                    continue
+                card_code = m_code.group(1).upper()
+                full_url = urljoin(url, href)
+                if full_url in seen_urls:
+                    continue
+                seen_urls.add(full_url)
+
+                container = a.find_parent('div', class_=re.compile(r'aspect|card|item|shadow', re.I))
+                if not container:
+                    container = a.parent
+
+                card_title = ""
+                if container and container.parent:
+                    for title_a in container.parent.find_all('a', href=href):
+                        t_text = title_a.get_text(strip=True)
+                        if t_text and not re.match(r'^\d+:\d+', t_text) and len(t_text) > len(card_title):
+                            card_title = t_text
+                if not card_title:
+                    card_title = a.get('alt') or card_code
+
+                duration = ""
+                if container:
+                    dur_span = container.find('span', class_=re.compile(r'text-xs|rounded|px-2', re.I))
+                    if dur_span:
+                        duration = dur_span.get_text(strip=True)
+
+                thumb = ""
+                if container:
+                    img = container.find('img')
+                    if img:
+                        thumb = img.get('data-src') or img.get('src') or ""
+                        if thumb.startswith("data:"):
+                            thumb = img.get('data-src') or ""
+
+                ep_num = float(len(listing_episodes) + 1)
+                listing_episodes.append({
+                    "episode_number": ep_num,
+                    "title": card_title or card_code,
+                    "page_url": full_url,
+                    "stream_url": "",
+                    "thumbnail_url": thumb,
+                    "duration": duration,
+                    "audio_type": "unknown",
+                    "id": f"{slug}-ep-{int(ep_num)}"
+                })
+
+            if listing_episodes:
+                cat_title = "nJAV TV - วิดีโอล่าสุด"
+                h1 = soup.find("h1")
+                if h1 and h1.get_text(strip=True) and "ค้นหา" not in h1.get_text(strip=True):
+                    cat_title = h1.get_text(strip=True)
+                elif soup.title and soup.title.string:
+                    cleaned_t = re.sub(r"\s*\|\s*nJAV.*$", "", soup.title.string, flags=re.I).strip()
+                    if cleaned_t and "ค้นหา" not in cleaned_t:
+                        cat_title = cleaned_t
+
+                cover = listing_episodes[0]["thumbnail_url"] if listing_episodes else ""
+                return {
+                    "slug": slug,
+                    "title": cat_title,
+                    "cover_url": cover,
+                    "backdrop_url": cover,
+                    "synopsis": f"รวมวิดีโอจาก nJAV ({len(listing_episodes)} รายการ)",
+                    "genres": ["AV", "Jav"],
+                    "rating": "8.5",
+                    "status": f"จบแล้ว ({len(listing_episodes)} ตอน)",
+                    "year": "2024",
+                    "source_url": url,
+                    "is_movie": False,
+                    "episodes": listing_episodes,
+                }
+
+        # Single video episode
         ep_title = code or "Full Video"
         episodes = [{
             "episode_number": 1.0,
