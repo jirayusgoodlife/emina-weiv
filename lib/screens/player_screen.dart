@@ -776,8 +776,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
       try {
         String effectiveServerUrl = serverUrl.replaceAll(RegExp(r'/+$'), '');
-        if (effectiveServerUrl.contains('127.0.0.1') || effectiveServerUrl.contains('localhost')) {
-          effectiveServerUrl = 'http://192.168.1.18:8800';
+        if (effectiveServerUrl.isNotEmpty) {
+          InAppStreamProxy.instance.serverBaseUrl = effectiveServerUrl;
         }
 
         String playableUrl = streamUrl;
@@ -798,7 +798,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             playableUrl.contains('flower.txt') ||
             lowerStream.contains('.m3u8') ||
             lowerStream.contains('flower.txt') ||
-            InAppStreamProxy.shouldProxyUrl(streamUrl);
+            InAppStreamProxy.shouldProxyUrl(streamUrl) ||
             lowerStream.contains('/o/');
 
         final netController = VideoPlayerController.networkUrl(
@@ -821,23 +821,65 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         }
         netController.setPlaybackSpeed(_playbackSpeed);
       } catch (e) {
-        final failedCtrl = _initializingController ?? controller;
-        _initializingController = null;
-        if (failedCtrl != null) {
+        // Fallback: If in-app proxy or direct stream failed and server is available, try server proxy
+        final effectiveServerUrl = serverUrl.replaceAll(RegExp(r'/+$'), '');
+        if (effectiveServerUrl.isNotEmpty &&
+            !streamUrl.contains('/api/proxy/hls/manifest') &&
+            !_isDisposed &&
+            mounted &&
+            epoch == _initEpoch) {
           try {
-            await failedCtrl.pause();
-          } catch (_) {}
-          try {
-            await failedCtrl.dispose();
-          } catch (_) {}
+            final serverProxyUrl = '$effectiveServerUrl/api/proxy/hls/manifest?url=${Uri.encodeComponent(streamUrl)}';
+            final fallbackCtrl = VideoPlayerController.networkUrl(
+              Uri.parse(serverProxyUrl),
+              formatHint: VideoFormat.hls,
+            );
+            _initializingController = fallbackCtrl;
+            controller = fallbackCtrl;
+            await fallbackCtrl.initialize();
+            if (_isDisposed || !mounted || epoch != _initEpoch) {
+              fallbackCtrl.removeListener(_videoListener);
+              try { await fallbackCtrl.pause(); } catch (_) {}
+              try { await fallbackCtrl.dispose(); } catch (_) {}
+              if (_initializingController == fallbackCtrl) _initializingController = null;
+              return;
+            }
+            fallbackCtrl.setPlaybackSpeed(_playbackSpeed);
+            // Fallback succeeded, skip to normal active controller handling
+          } catch (e2) {
+            final failedCtrl = _initializingController ?? controller;
+            _initializingController = null;
+            if (failedCtrl != null) {
+              try { await failedCtrl.pause(); } catch (_) {}
+              try { await failedCtrl.dispose(); } catch (_) {}
+            }
+            if (mounted && epoch == _initEpoch) {
+              setState(() {
+                _errorMessage = 'ไม่สามารถเล่นวิดีโอได้: $e2';
+                _isLoading = false;
+              });
+            }
+            return;
+          }
+        } else {
+          final failedCtrl = _initializingController ?? controller;
+          _initializingController = null;
+          if (failedCtrl != null) {
+            try {
+              await failedCtrl.pause();
+            } catch (_) {}
+            try {
+              await failedCtrl.dispose();
+            } catch (_) {}
+          }
+          if (mounted && epoch == _initEpoch) {
+            setState(() {
+              _errorMessage = 'ไม่สามารถเล่นวิดีโอได้: $e';
+              _isLoading = false;
+            });
+          }
+          return;
         }
-        if (mounted && epoch == _initEpoch) {
-          setState(() {
-            _errorMessage = 'ไม่สามารถเล่นวิดีโอได้: $e';
-            _isLoading = false;
-          });
-        }
-        return;
       }
     }
 

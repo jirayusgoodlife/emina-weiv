@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/isar_models.dart';
 import '../models/watch_progress.dart';
 import '../services/isar_service.dart';
+import '../services/in_app_stream_proxy.dart';
 
 class AnimeCatalogProvider extends ChangeNotifier {
   final IsarService _isarService;
@@ -33,6 +34,7 @@ class AnimeCatalogProvider extends ChangeNotifier {
   })  : _isarService = isarService,
         _prefs = prefs {
     _serverUrl = _prefs.getString(_prefServerUrlKey) ?? 'http://127.0.0.1:8800';
+    InAppStreamProxy.instance.serverBaseUrl = _serverUrl;
     _hiddenSlugs = (_prefs.getStringList(_prefHiddenSlugsKey) ?? []).toSet();
     loadData();
   }
@@ -168,6 +170,7 @@ class AnimeCatalogProvider extends ChangeNotifier {
       clean = 'http://$clean';
     }
     _serverUrl = clean;
+    InAppStreamProxy.instance.serverBaseUrl = _serverUrl;
     await _prefs.setString(_prefServerUrlKey, _serverUrl);
     notifyListeners();
   }

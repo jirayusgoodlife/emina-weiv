@@ -140,7 +140,10 @@ class IsarService {
 
       // Update dynamic stream proxy rules from server
       if (jsonMap['proxy_rules'] is List) {
-        InAppStreamProxy.instance.updateProxyRules(jsonMap['proxy_rules'] as List<dynamic>);
+        InAppStreamProxy.instance.updateProxyRules(
+          jsonMap['proxy_rules'] as List<dynamic>,
+          serverUrl: serverBaseUrl,
+        );
       }
 
       int syncedCount = 0;

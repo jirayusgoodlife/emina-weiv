@@ -10,6 +10,7 @@ class InAppStreamProxy {
 
   HttpServer? _server;
   int? _port;
+  String? serverBaseUrl;
 
   InAppStreamProxy._();
 
@@ -18,8 +19,11 @@ class InAppStreamProxy {
 
   static List<Map<String, dynamic>> _dynamicProxyRules = [];
 
-  void updateProxyRules(List<dynamic> rules) {
+  void updateProxyRules(List<dynamic> rules, {String? serverUrl}) {
     _dynamicProxyRules = rules.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      serverBaseUrl = serverUrl.replaceAll(RegExp(r'/+$'), '');
+    }
     if (kDebugMode) {
       print('[InAppProxy] Loaded ${_dynamicProxyRules.length} dynamic proxy rules from server');
     }
@@ -556,13 +560,34 @@ class InAppStreamProxy {
     try {
       final req = http.Request('GET', uri)..headers.addAll(_getCustomHeaders(targetUrl));
       final streamedRes = await client.send(req);
-      final body = await streamedRes.stream.bytesToString();
+      String body = await streamedRes.stream.bytesToString();
 
-      if (streamedRes.statusCode != 200) {
-        request.response.statusCode = streamedRes.statusCode;
-        request.response.write(body);
-        await request.response.close();
-        return;
+      if (streamedRes.statusCode != 200 || body.contains('Attention Required! | Cloudflare')) {
+        // Fallback to server's HLS proxy if client is blocked by Cloudflare (403) or upstream error
+        if (serverBaseUrl != null && serverBaseUrl!.isNotEmpty) {
+          final sUrl = '$serverBaseUrl/api/proxy/hls/manifest?url=${Uri.encodeComponent(targetUrl)}';
+          try {
+            final sRes = await client.get(Uri.parse(sUrl));
+            if (sRes.statusCode == 200 && sRes.body.contains('#EXTM3U')) {
+              body = sRes.body;
+            } else {
+              request.response.statusCode = streamedRes.statusCode;
+              request.response.write(body);
+              await request.response.close();
+              return;
+            }
+          } catch (_) {
+            request.response.statusCode = streamedRes.statusCode;
+            request.response.write(body);
+            await request.response.close();
+            return;
+          }
+        } else {
+          request.response.statusCode = streamedRes.statusCode;
+          request.response.write(body);
+          await request.response.close();
+          return;
+        }
       }
 
       String manifestBody = body;
@@ -641,14 +666,36 @@ class InAppStreamProxy {
       final streamedRes = await client.send(req);
       final bytes = await streamedRes.stream.toBytes();
 
-      if (streamedRes.statusCode != 200 && streamedRes.statusCode != 206) {
-        request.response.statusCode = streamedRes.statusCode;
-        request.response.add(bytes);
-        await request.response.close();
-        return;
-      }
-
       Uint8List payload = bytes;
+
+      if ((streamedRes.statusCode != 200 && streamedRes.statusCode != 206) ||
+          (bytes.length < 500 && utf8.decode(bytes, allowMalformed: true).contains('Attention Required! | Cloudflare'))) {
+        // Fallback to server's HLS segment proxy if client is blocked by Cloudflare (403)
+        if (serverBaseUrl != null && serverBaseUrl!.isNotEmpty) {
+          final sUrl = '$serverBaseUrl/api/proxy/hls/segment?url=${Uri.encodeComponent(targetUrl)}';
+          try {
+            final sRes = await client.get(Uri.parse(sUrl));
+            if (sRes.statusCode == 200 || sRes.statusCode == 206) {
+              payload = sRes.bodyBytes;
+            } else {
+              request.response.statusCode = streamedRes.statusCode;
+              request.response.add(bytes);
+              await request.response.close();
+              return;
+            }
+          } catch (_) {
+            request.response.statusCode = streamedRes.statusCode;
+            request.response.add(bytes);
+            await request.response.close();
+            return;
+          }
+        } else {
+          request.response.statusCode = streamedRes.statusCode;
+          request.response.add(bytes);
+          await request.response.close();
+          return;
+        }
+      }
 
       // Animenani strip fake PNG header (typically at offset 6455)
       // MPEG-TS packets start with sync byte 0x47 and have 188-byte stride
