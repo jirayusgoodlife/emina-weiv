@@ -2440,14 +2440,18 @@
           <td><input type="text" class="ep-title" value="${ep.title || `ตอนที่ ${idx + 1}`}" style="padding: 6px;" /></td>
           <td>
             <div style="display: flex; gap: 6px;">
-              <input type="text" class="ep-stream" value="${ep.stream_url || ''}" placeholder="URL วิดีโอ .m3u8 หรือ .mp4" style="padding: 6px;" />
-              ${ep.stream_url ? `<button type="button" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.75rem;" onclick="playTestStream('${ep.stream_url}', '${ep.title}')">ทดสอบ</button>` : ''}
+              <input type="text" class="ep-stream" value="${escapeHtml(ep.stream_url || '')}" placeholder="URL วิดีโอ .m3u8 หรือ .mp4" style="padding: 6px;" />
+              ${ep.stream_url ? `<button type="button" class="btn btn-outline btn-play-test" style="padding: 4px 8px; font-size: 0.75rem;">ทดสอบ</button>` : ''}
             </div>
           </td>
           <td>
             <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.75rem;" onclick="this.closest('tr').remove(); updateEpCount();">ลบ</button>
           </td>
         `;
+        const playBtn = tr.querySelector('.btn-play-test');
+        if (playBtn) {
+          playBtn.addEventListener('click', () => playTestStream(ep.stream_url, ep.title));
+        }
         tbody.appendChild(tr);
       });
 
@@ -2814,15 +2818,29 @@
             </div>
             <div class="anime-actions" style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
               ${a.source_url ? `
-                <button class="btn btn-outline" style="padding: 6px 10px; font-size: 0.8rem; border-color: rgba(5, 217, 232, 0.4); color: var(--accent);" onclick="updateAnimeEpisodesDirectly(${JSON.stringify(a.slug)})" title="ดึงตอนใหม่จากเว็บต้นทางทันที">
+                <button class="btn btn-outline btn-update-episodes" style="padding: 6px 10px; font-size: 0.8rem; border-color: rgba(5, 217, 232, 0.4); color: var(--accent);" title="ดึงตอนใหม่จากเว็บต้นทางทันที">
                   🔄 อัปเดตตอน
                 </button>
               ` : ''}
-              <button class="btn btn-outline" style="flex: 1; padding: 6px 10px; font-size: 0.8rem;" onclick='editAnimeInStudio(${JSON.stringify(a).replace(/'/g, "&#39;")})'>แก้ไข</button>
-              <button class="btn btn-danger" style="padding: 6px 10px; font-size: 0.8rem;" onclick="deleteAnime(${JSON.stringify(a.slug)})">ลบ</button>
+              <button class="btn btn-outline btn-edit-anime" style="flex: 1; padding: 6px 10px; font-size: 0.8rem;">แก้ไข</button>
+              <button class="btn btn-danger btn-delete-anime" style="padding: 6px 10px; font-size: 0.8rem;">ลบ</button>
             </div>
           </div>
         `;
+
+        const updateBtn = card.querySelector('.btn-update-episodes');
+        if (updateBtn) {
+          updateBtn.addEventListener('click', () => updateAnimeEpisodesDirectly(a.slug));
+        }
+        const editBtn = card.querySelector('.btn-edit-anime');
+        if (editBtn) {
+          editBtn.addEventListener('click', () => editAnimeInStudio(a));
+        }
+        const deleteBtn = card.querySelector('.btn-delete-anime');
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', () => deleteAnime(a.slug));
+        }
+
         grid.appendChild(card);
       });
     }
