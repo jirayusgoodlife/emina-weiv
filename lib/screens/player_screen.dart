@@ -67,6 +67,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   bool _showVolumeIndicator = false;
   Timer? _indicatorHideTimer;
   bool _lastReportedPlaying = false;
+  double _lastLongPressY = 0.0;
+
+  // Screen lock controls
+  bool _isLocked = false;
+  bool _showUnlockSlider = false;
+  Timer? _unlockSliderHideTimer;
+  double _unlockDragProgress = 0.0;
 
   // Horizontal Swipe Seek controls & YouTube-style Preview
   bool _isDraggingSeek = false;
@@ -402,10 +409,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     setState(() {});
   }
 
-  void _onVerticalDragStart(DragStartDetails details) {
-    if (_isPipMode || _isLoading || _errorMessage != null) return;
+  void _onLongPressStart(LongPressStartDetails details) {
+    if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
     final width = MediaQuery.of(context).size.width;
     _indicatorHideTimer?.cancel();
+    _lastLongPressY = details.globalPosition.dy;
+    HapticFeedback.selectionClick();
+
     if (details.globalPosition.dx < width / 2) {
       // Left side: Brightness
       _isDraggingBrightness = true;
@@ -422,10 +432,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     setState(() {});
   }
 
-  void _onVerticalDragUpdate(DragUpdateDetails details) {
+  void _onLongPressMoveUpdate(LongPressMoveUpdateDetails details) {
     if (!_isDraggingBrightness && !_isDraggingVolume) return;
     final height = MediaQuery.of(context).size.height;
-    final delta = -details.delta.dy / (height * 0.6);
+    final deltaY = _lastLongPressY - details.globalPosition.dy;
+    _lastLongPressY = details.globalPosition.dy;
+    final delta = deltaY / (height * 0.6);
 
     if (_isDraggingBrightness) {
       _updateBrightness((_currentBrightness + delta).clamp(0.0, 1.0));
@@ -434,7 +446,15 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  void _onVerticalDragEnd(DragEndDetails details) {
+  void _onLongPressEnd(LongPressEndDetails details) {
+    _endLongPressGesture();
+  }
+
+  void _onLongPressUp() {
+    _endLongPressGesture();
+  }
+
+  void _endLongPressGesture() {
     _isDraggingBrightness = false;
     _isDraggingVolume = false;
     _indicatorHideTimer?.cancel();
@@ -449,7 +469,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _onHorizontalDragStart(DragStartDetails details) {
-    if (_isPipMode || _isLoading || _errorMessage != null) return;
+    if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
     final dur = c.value.duration;
@@ -517,7 +537,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _onDoubleTap() {
-    if (_isPipMode || _isLoading || _errorMessage != null) return;
+    if (_isLocked || _isPipMode || _isLoading || _errorMessage != null) return;
     final details = _doubleTapDetails;
     if (details == null) return;
     final width = MediaQuery.of(context).size.width;
@@ -570,7 +590,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   void _onSystemVolumeChanged(double volume) {
     if (!mounted) return;
-    if (_isDraggingVolume) return;
+    if (_isDraggingVolume || _isLocked) return;
 
     final clamped = volume.clamp(0.0, 1.0);
     setState(() {
@@ -638,6 +658,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _indicatorHideTimer?.cancel();
     _seekPreviewHideTimer?.cancel();
     _doubleTapFeedbackTimer?.cancel();
+    _unlockSliderHideTimer?.cancel();
     _saveProgress();
 
     final c = _controller;
@@ -1080,12 +1101,58 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   void _toggleControls() {
+    if (_isLocked) {
+      _showUnlockPrompt();
+      return;
+    }
     setState(() {
       _showControls = !_showControls;
     });
     if (_showControls) {
       _startHideTimer();
     }
+  }
+
+  void _lockScreen() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _isLocked = true;
+      _showControls = false;
+      _showBrightnessIndicator = false;
+      _showVolumeIndicator = false;
+      _showSeekPreview = false;
+      _showDoubleTapFeedback = false;
+    });
+    _hideTimer?.cancel();
+    _showUnlockPrompt();
+  }
+
+  void _showUnlockPrompt() {
+    setState(() {
+      _showUnlockSlider = true;
+      _unlockDragProgress = 0.0;
+    });
+    _unlockSliderHideTimer?.cancel();
+    _unlockSliderHideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _isLocked) {
+        setState(() {
+          _showUnlockSlider = false;
+          _unlockDragProgress = 0.0;
+        });
+      }
+    });
+  }
+
+  void _unlockScreen() {
+    HapticFeedback.heavyImpact();
+    _unlockSliderHideTimer?.cancel();
+    setState(() {
+      _isLocked = false;
+      _showUnlockSlider = false;
+      _unlockDragProgress = 0.0;
+      _showControls = true;
+    });
+    _startHideTimer();
   }
 
   void _playNextEpisode() {
@@ -1270,9 +1337,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
 
     return PopScope(
-      // While fullscreen, the system back button exits fullscreen first
-      // (restoring the normal orientation policy) instead of leaving the screen.
-      canPop: !_isFullscreen,
+      // While fullscreen or locked, block standard pop:
+      // - If locked, show unlock prompt to prevent accidental exit
+      // - If fullscreen, exit fullscreen first instead of leaving the screen
+      canPop: !_isFullscreen && !_isLocked,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           _isDisposed = true;
@@ -1288,6 +1356,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             try { ic.pause(); } catch (_) {}
             try { ic.dispose(); } catch (_) {}
           }
+        } else if (_isLocked) {
+          _showUnlockPrompt();
         } else if (_isFullscreen) {
           // Blocked system-back press while fullscreen: behave exactly like the
           // exit-fullscreen button — restore orientations and system bars.
@@ -1300,9 +1370,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           onTap: _toggleControls,
           onDoubleTapDown: _onDoubleTapDown,
           onDoubleTap: _onDoubleTap,
-          onVerticalDragStart: _onVerticalDragStart,
-          onVerticalDragUpdate: _onVerticalDragUpdate,
-          onVerticalDragEnd: _onVerticalDragEnd,
+          onLongPressStart: _onLongPressStart,
+          onLongPressMoveUpdate: _onLongPressMoveUpdate,
+          onLongPressEnd: _onLongPressEnd,
+          onLongPressUp: _onLongPressUp,
           onHorizontalDragStart: _onHorizontalDragStart,
           onHorizontalDragUpdate: _onHorizontalDragUpdate,
           onHorizontalDragEnd: _onHorizontalDragEnd,
@@ -1436,7 +1507,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
 
               // Next Episode Quick Button (Appears during the configured final window, only if a next episode exists)
-              if (showNextEpisodeButton)
+              if (showNextEpisodeButton && !_isLocked)
                 Positioned(
                   bottom: _showControls ? 95 : 32,
                   right: 20,
@@ -1504,14 +1575,47 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
 
               // Custom Controls Overlay
-              if (_showControls && !_isLoading && _errorMessage == null)
+              if (_showControls && !_isLoading && _errorMessage == null && !_isLocked)
                 _buildControlsOverlay(pos, dur),
+
+              // Floating Lock Button on the left in landscape mode
+              if (_showControls && isLandscape && !_isLocked && !_isLoading && _errorMessage == null && !_isPipMode)
+                Positioned(
+                  left: 20,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Tooltip(
+                      message: 'ล็อกหน้าจอ',
+                      child: InkWell(
+                        onTap: _lockScreen,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xCC141824),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.4),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.lock_outline, color: Colors.white, size: 22),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
 
               // Left Slider (Brightness) with Scale & Numbers
               if ((_showBrightnessIndicator || (_showControls && isLandscape)) &&
                   !_isLoading &&
                   _errorMessage == null &&
-                  !_isPipMode)
+                  !_isPipMode &&
+                  !_isLocked)
                 _buildVerticalSliderHud(
                   isLeft: true,
                   icon: _brightnessIcon,
@@ -1530,7 +1634,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               if ((_showVolumeIndicator || (_showControls && isLandscape)) &&
                   !_isLoading &&
                   _errorMessage == null &&
-                  !_isPipMode)
+                  !_isPipMode &&
+                  !_isLocked)
                 _buildVerticalSliderHud(
                   isLeft: false,
                   icon: _volumeIcon,
@@ -1546,12 +1651,16 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
 
               // YouTube-style Horizontal Seek Preview HUD
-              if (_showSeekPreview && !_isLoading && _errorMessage == null && !_isPipMode)
+              if (_showSeekPreview && !_isLoading && _errorMessage == null && !_isPipMode && !_isLocked)
                 _buildSeekPreviewHud(dur),
 
               // Double Tap Seek Ripple Feedback (Left = -10s, Right = +10s)
-              if (_showDoubleTapFeedback && !_isLoading && _errorMessage == null && !_isPipMode)
+              if (_showDoubleTapFeedback && !_isLoading && _errorMessage == null && !_isPipMode && !_isLocked)
                 _buildDoubleTapFeedback(),
+
+              // Slide to Unlock UI (when screen is locked)
+              if (_isLocked && !_isLoading && _errorMessage == null)
+                _buildSlideToUnlock(),
             ],
           ),
         ),
@@ -1904,6 +2013,18 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       padding: const EdgeInsets.all(4),
                       visualDensity: VisualDensity.compact,
                       onPressed: _enterPip,
+                    ),
+                  ),
+
+                  // Lock Screen Button
+                  Tooltip(
+                    message: 'ล็อกการควบคุมหน้าจอ',
+                    child: IconButton(
+                      icon: const Icon(Icons.lock_outline, color: Colors.white, size: 21),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      padding: const EdgeInsets.all(4),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _lockScreen,
                     ),
                   ),
 
@@ -2544,8 +2665,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         final newVal = 1.0 - (localY / effectiveHeight);
                         onChanged(newVal);
                       },
-                      onVerticalDragEnd: (details) {
-                        _onVerticalDragEnd(details);
+                      onVerticalDragEnd: (_) {
+                        _endLongPressGesture();
                       },
                       onTapDown: (details) {
                         const trackTop = 8.0;
@@ -2571,6 +2692,186 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlideToUnlock() {
+    const trackWidth = 260.0;
+    const trackHeight = 52.0;
+    const thumbSize = 44.0;
+    final maxDragDistance = trackWidth - thumbSize - 8.0;
+
+    return Center(
+      child: AnimatedOpacity(
+        opacity: _showUnlockSlider ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 250),
+        child: IgnorePointer(
+          ignoring: !_showUnlockSlider,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xDD10141E),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.amber.withOpacity(0.6), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.lock_rounded, color: Colors.amber, size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      'หน้าจอล็อกอยู่',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Slider Track
+              Container(
+                width: trackWidth,
+                height: trackHeight,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xEE161B26),
+                  borderRadius: BorderRadius.circular(trackHeight / 2),
+                  border: Border.all(color: Colors.white24, width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    // Background progress highlight
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: thumbSize + (_unlockDragProgress * maxDragDistance),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.amber.withOpacity(0.25),
+                              AppTheme.accent.withOpacity(0.45),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(trackHeight / 2),
+                        ),
+                      ),
+                    ),
+
+                    // Centered Text Label
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 36),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'เลื่อนเพื่อปลดล็อก',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(
+                                  (1.0 - _unlockDragProgress * 1.5).clamp(0.2, 0.9),
+                                ),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.keyboard_double_arrow_right_rounded,
+                              size: 18,
+                              color: Colors.white.withOpacity(
+                                (1.0 - _unlockDragProgress * 1.5).clamp(0.2, 0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Draggable Thumb
+                    Positioned(
+                      left: _unlockDragProgress * maxDragDistance,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragUpdate: (details) {
+                          _unlockSliderHideTimer?.cancel();
+                          final newDist = (_unlockDragProgress * maxDragDistance) + details.delta.dx;
+                          final newProgress = (newDist / maxDragDistance).clamp(0.0, 1.0);
+                          setState(() {
+                            _unlockDragProgress = newProgress;
+                          });
+
+                          if (_unlockDragProgress >= 0.88) {
+                            _unlockScreen();
+                          }
+                        },
+                        onHorizontalDragEnd: (_) {
+                          if (_unlockDragProgress < 0.88) {
+                            setState(() {
+                              _unlockDragProgress = 0.0;
+                            });
+                            _showUnlockPrompt();
+                          }
+                        },
+                        child: Container(
+                          width: thumbSize,
+                          height: thumbSize,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.amber, Color(0xFFFFB300)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.amber.withOpacity(0.6),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            _unlockDragProgress >= 0.88
+                                ? Icons.lock_open_rounded
+                                : Icons.lock_rounded,
+                            color: Colors.black87,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -15,6 +15,7 @@ void main() {
 
       // Verify systemVolume ValueNotifier exists
       expect(PipService.systemVolume, isNotNull);
+      expect(receivedVolume, isNull);
 
       PipService.removeVolumeListener(listener);
     });
