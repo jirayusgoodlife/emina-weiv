@@ -32,10 +32,60 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    UpdateService.instance.downloadedFilePath
+        .addListener(_onDownloadedFilePathChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUpdateOnLaunch();
       DownloadBackgroundService.requestNotificationPermission();
     });
+  }
+
+  @override
+  void dispose() {
+    UpdateService.instance.downloadedFilePath
+        .removeListener(_onDownloadedFilePathChanged);
+    super.dispose();
+  }
+
+  void _onDownloadedFilePathChanged() {
+    final path = UpdateService.instance.downloadedFilePath.value;
+    if (path != null && mounted) {
+      final release = UpdateService.instance.activeDownloadingRelease.value ??
+          UpdateService.instance.updateAvailable.value;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            release != null
+                ? 'ดาวน์โหลดอัปเดต v${release.version} เสร็จแล้ว พร้อมติดตั้ง'
+                : 'ดาวน์โหลดอัปเดตเสร็จแล้ว พร้อมติดตั้ง',
+          ),
+          action: SnackBarAction(
+            label: 'ติดตั้ง',
+            onPressed: () async {
+              final can =
+                  await UpdateService.instance.canInstallUnknownPackages();
+              if (can) {
+                await UpdateService.instance.installApk(path);
+              } else if (mounted) {
+                final versionInfo =
+                    await UpdateService.instance.getCurrentAppVersion();
+                final currentVer =
+                    versionInfo['versionName'] as String? ?? '1.0.0';
+                if (!mounted) return;
+                if (release != null) {
+                  UpdateDialog.show(context,
+                      releaseInfo: release, currentVersion: currentVer);
+                } else {
+                  await UpdateService.instance.openInstallPermissionSettings();
+                }
+              }
+            },
+          ),
+          duration: const Duration(seconds: 15),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _checkUpdateOnLaunch() async {

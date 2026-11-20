@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'download_background_service.dart';
 
 class ReleaseAssetInfo {
   final String name;
@@ -55,6 +56,20 @@ class UpdateService {
   /// Notification notifier that emits when an update is available (or null if up to date)
   final ValueNotifier<AppReleaseInfo?> updateAvailable =
       ValueNotifier<AppReleaseInfo?>(null);
+
+  /// Download state notifiers for global/background tracking
+  final ValueNotifier<bool> isDownloading = ValueNotifier<bool>(false);
+  final ValueNotifier<double> downloadProgress = ValueNotifier<double>(0.0);
+  final ValueNotifier<int> downloadReceivedBytes = ValueNotifier<int>(0);
+  final ValueNotifier<int> downloadTotalBytes = ValueNotifier<int>(0);
+  final ValueNotifier<String?> downloadedFilePath =
+      ValueNotifier<String?>(null);
+  final ValueNotifier<String?> downloadError = ValueNotifier<String?>(null);
+  final ValueNotifier<AppReleaseInfo?> activeDownloadingRelease =
+      ValueNotifier<AppReleaseInfo?>(null);
+
+  CancelToken? _cancelToken;
+  DateTime? _lastNotificationUpdateTime;
 
   /// The latest version string discovered from GitHub Releases (e.g. '1.1.2')
   String? latestGitHubVersion;
@@ -174,37 +189,136 @@ class UpdateService {
     }
   }
 
+  /// Start downloading APK in background with foreground service notification and wakelock
+  Future<String?> startDownload(
+    AppReleaseInfo release, {
+    void Function(double progress, int received, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    if (isDownloading.value) return downloadedFilePath.value;
+
+    isDownloading.value = true;
+    downloadProgress.value = 0.0;
+    downloadReceivedBytes.value = 0;
+    downloadTotalBytes.value = release.apkAsset.size;
+    downloadedFilePath.value = null;
+    downloadError.value = null;
+    activeDownloadingRelease.value = release;
+    _cancelToken = cancelToken ?? CancelToken();
+
+    // Start background foreground service and wakelock
+    await DownloadBackgroundService.requestNotificationPermission();
+    await DownloadBackgroundService.startService(
+      title: 'กำลังดาวน์โหลดอัปเดต v${release.version}',
+      message: 'กำลังเริ่มการดาวน์โหลด...',
+      progress: 0,
+      max: 100,
+    );
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final fileName = 'emina_weiv_v${release.version}.apk';
+      final savePath = '${tempDir.path}/$fileName';
+
+      final file = File(savePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      final dio = Dio();
+      await dio.download(
+        release.apkAsset.downloadUrl,
+        savePath,
+        cancelToken: _cancelToken,
+        onReceiveProgress: (received, total) {
+          final progress =
+              total > 0 ? (received / total).clamp(0.0, 1.0) : 0.0;
+          downloadProgress.value = progress;
+          downloadReceivedBytes.value = received;
+          if (total > 0) downloadTotalBytes.value = total;
+
+          onProgress?.call(progress, received, total);
+
+          // Throttled notification progress update (every 800ms)
+          final now = DateTime.now();
+          if (_lastNotificationUpdateTime == null ||
+              now.difference(_lastNotificationUpdateTime!).inMilliseconds > 800 ||
+              progress >= 1.0) {
+            _lastNotificationUpdateTime = now;
+            final percent = (progress * 100).toInt();
+            final recMb = (received / (1024 * 1024)).toStringAsFixed(1);
+            final totMb =
+                total > 0 ? (total / (1024 * 1024)).toStringAsFixed(1) : '?';
+            DownloadBackgroundService.updateProgress(
+              title: 'กำลังดาวน์โหลดอัปเดต v${release.version}',
+              message: '$percent% ($recMb / $totMb MB)',
+              progress: percent,
+              max: 100,
+            );
+          }
+        },
+      );
+
+      downloadedFilePath.value = savePath;
+      isDownloading.value = false;
+
+      // Stop service with completed summary and allow tapping notification to install
+      await DownloadBackgroundService.stopService(
+        summary: 'ดาวน์โหลดอัปเดต v${release.version} เสร็จแล้ว แตะเพื่อติดตั้ง',
+        apkPath: savePath,
+      );
+
+      return savePath;
+    } catch (e) {
+      isDownloading.value = false;
+      await DownloadBackgroundService.stopService();
+
+      if (e is DioException && CancelToken.isCancel(e)) {
+        downloadError.value = null;
+      } else {
+        downloadError.value = 'เกิดข้อผิดพลาดในการดาวน์โหลด: $e';
+      }
+      return null;
+    } finally {
+      _cancelToken = null;
+    }
+  }
+
+  /// Cancel any active update download
+  void cancelDownload() {
+    if (_cancelToken != null && !_cancelToken!.isCancelled) {
+      _cancelToken!.cancel();
+    }
+    isDownloading.value = false;
+    DownloadBackgroundService.stopService();
+  }
+
+  /// Reset the download state (e.g. after successful installation or dismissed error)
+  void resetDownloadState() {
+    isDownloading.value = false;
+    downloadProgress.value = 0.0;
+    downloadReceivedBytes.value = 0;
+    downloadTotalBytes.value = 0;
+    downloadedFilePath.value = null;
+    downloadError.value = null;
+    activeDownloadingRelease.value = null;
+  }
+
   /// Download the APK with progress and launch the Android package installer
   Future<String> downloadApk(
     AppReleaseInfo release, {
     void Function(double progress, int received, int total)? onProgress,
     CancelToken? cancelToken,
   }) async {
-    final tempDir = await getTemporaryDirectory();
-    final fileName = 'emina_weiv_v${release.version}.apk';
-    final savePath = '${tempDir.path}/$fileName';
-
-    final file = File(savePath);
-    if (await file.exists()) {
-      await file.delete();
-    }
-
-    final dio = Dio();
-    await dio.download(
-      release.apkAsset.downloadUrl,
-      savePath,
+    final path = await startDownload(
+      release,
+      onProgress: onProgress,
       cancelToken: cancelToken,
-      onReceiveProgress: (received, total) {
-        if (total > 0) {
-          final progress = received / total;
-          onProgress?.call(progress, received, total);
-        } else {
-          onProgress?.call(0.0, received, total);
-        }
-      },
     );
-
-    return savePath;
+    if (path == null) {
+      throw Exception(downloadError.value ?? 'Download failed or canceled');
+    }
+    return path;
   }
 
   /// Trigger the installation of the downloaded APK

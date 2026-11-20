@@ -474,7 +474,8 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopService" -> {
                     val summary = call.argument<String>("summary")
-                    DownloadForegroundService.stop(this, summary)
+                    val apkPath = call.argument<String>("apkPath")
+                    DownloadForegroundService.stop(this, summary, apkPath)
                     result.success(true)
                 }
                 "minimizeApp" -> {

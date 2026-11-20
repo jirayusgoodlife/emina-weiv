@@ -13,6 +13,8 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.FileProvider
+import java.io.File
 
 class DownloadForegroundService : Service() {
     companion object {
@@ -28,6 +30,7 @@ class DownloadForegroundService : Service() {
         const val EXTRA_PROGRESS = "EXTRA_PROGRESS"
         const val EXTRA_MAX = "EXTRA_MAX"
         const val EXTRA_COMPLETED_SUMMARY = "EXTRA_COMPLETED_SUMMARY"
+        const val EXTRA_APK_PATH = "EXTRA_APK_PATH"
 
         fun start(context: Context, title: String, message: String, progress: Int = 0, max: Int = 100) {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
@@ -67,10 +70,11 @@ class DownloadForegroundService : Service() {
             }
         }
 
-        fun stop(context: Context, completedSummary: String? = null) {
+        fun stop(context: Context, completedSummary: String? = null, apkPath: String? = null) {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
                 action = ACTION_STOP
                 putExtra(EXTRA_COMPLETED_SUMMARY, completedSummary)
+                putExtra(EXTRA_APK_PATH, apkPath)
             }
             try {
                 context.startService(intent)
@@ -102,17 +106,18 @@ class DownloadForegroundService : Service() {
         when (action) {
             ACTION_STOP -> {
                 val summary = intent?.getStringExtra(EXTRA_COMPLETED_SUMMARY)
-                handleStop(summary)
+                val apkPath = intent?.getStringExtra(EXTRA_APK_PATH)
+                handleStop(summary, apkPath)
             }
             ACTION_UPDATE -> {
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "กำลังดาวน์โหลดอนิเมะ"
+                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "กำลังดาวน์โหลด"
                 val message = intent?.getStringExtra(EXTRA_MESSAGE) ?: "กำลังดาวน์โหลด..."
                 val progress = intent?.getIntExtra(EXTRA_PROGRESS, 0) ?: 0
                 val max = intent?.getIntExtra(EXTRA_MAX, 100) ?: 100
                 updateNotification(title, message, progress, max)
             }
             ACTION_START -> {
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "กำลังดาวน์โหลดอนิเมะ"
+                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "กำลังดาวน์โหลด"
                 val message = intent?.getStringExtra(EXTRA_MESSAGE) ?: "เริ่มการดาวน์โหลด..."
                 val progress = intent?.getIntExtra(EXTRA_PROGRESS, 0) ?: 0
                 val max = intent?.getIntExtra(EXTRA_MAX, 100) ?: 100
@@ -144,7 +149,7 @@ class DownloadForegroundService : Service() {
         notificationManager?.notify(NOTIFICATION_ID, notification)
     }
 
-    private fun handleStop(completedSummary: String?) {
+    private fun handleStop(completedSummary: String?, apkPath: String? = null) {
         try {
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
@@ -152,13 +157,35 @@ class DownloadForegroundService : Service() {
         } catch (_: Exception) {}
 
         if (completedSummary != null && completedSummary.isNotEmpty()) {
+            val pendingIntent = if (!apkPath.isNullOrEmpty() && File(apkPath).exists()) {
+                try {
+                    val file = File(apkPath)
+                    val uri = FileProvider.getUriForFile(this, "${packageName}.fileProvider", file)
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    } else {
+                        PendingIntent.FLAG_UPDATE_CURRENT
+                    }
+                    PendingIntent.getActivity(this, 0, installIntent, flags)
+                } catch (e: Exception) {
+                    createPendingIntent()
+                }
+            } else {
+                createPendingIntent()
+            }
+
             val completedNotification = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("ดาวน์โหลดเสร็จสิ้น")
                 .setContentText(completedSummary)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setOngoing(false)
                 .setAutoCancel(true)
-                .setContentIntent(createPendingIntent())
+                .setContentIntent(pendingIntent)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build()
 
@@ -209,10 +236,10 @@ class DownloadForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "การดาวน์โหลดอนิเมะ",
+                "การดาวน์โหลด",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "แสดงความคืบหน้าการดาวน์โหลดอนิเมะในพื้นหลัง"
+                description = "แสดงความคืบหน้าการดาวน์โหลดในพื้นหลัง"
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)

@@ -45,8 +45,11 @@ void main() {
       max: 100,
     );
 
-    // stopService
-    await DownloadBackgroundService.stopService(summary: 'เสร็จสิ้น 1 ตอน');
+    // stopService with apkPath
+    await DownloadBackgroundService.stopService(
+      summary: 'ดาวน์โหลดอัปเดตเสร็จแล้ว',
+      apkPath: '/tmp/test.apk',
+    );
     expect(DownloadBackgroundService.isServiceRunning, isFalse);
 
     // minimizeApp
@@ -63,5 +66,8 @@ void main() {
       'minimizeApp',
       'requestNotificationPermission',
     ]);
+    final lastStop = methodCalls[2].arguments as Map;
+    expect(lastStop['summary'], 'ดาวน์โหลดอัปเดตเสร็จแล้ว');
+    expect(lastStop['apkPath'], '/tmp/test.apk');
   });
 }

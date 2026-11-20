@@ -54,13 +54,14 @@ class DownloadBackgroundService {
     }
   }
 
-  /// Stop foreground service, optionally showing a completed summary notification
-  static Future<void> stopService({String? summary}) async {
+  /// Stop foreground service, optionally showing a completed summary notification and APK installer intent
+  static Future<void> stopService({String? summary, String? apkPath}) async {
     if (!_isAndroid) return;
     try {
       _isServiceRunning = false;
       await _channel.invokeMethod('stopService', {
         'summary': summary,
+        if (apkPath != null) 'apkPath': apkPath,
       });
     } catch (e) {
       if (kDebugMode) print('[DownloadBackgroundService] stopService error: $e');

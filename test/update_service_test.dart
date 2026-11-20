@@ -37,5 +37,40 @@ void main() {
       expect(service.updateAvailable, isNotNull);
       expect(service.latestGitHubVersion, anyOf(isNull, isA<String>()));
     });
+
+    test('Background download state notifiers and controls work correctly', () {
+      final service = UpdateService.instance;
+
+      expect(service.isDownloading.value, isFalse);
+      expect(service.downloadProgress.value, 0.0);
+      expect(service.downloadReceivedBytes.value, 0);
+      expect(service.downloadTotalBytes.value, 0);
+      expect(service.downloadedFilePath.value, isNull);
+      expect(service.downloadError.value, isNull);
+      expect(service.activeDownloadingRelease.value, isNull);
+
+      // Mutate and verify resetDownloadState
+      service.isDownloading.value = true;
+      service.downloadProgress.value = 0.75;
+      service.downloadReceivedBytes.value = 7500;
+      service.downloadTotalBytes.value = 10000;
+      service.downloadedFilePath.value = '/tmp/fake.apk';
+      service.downloadError.value = 'fake error';
+
+      service.resetDownloadState();
+
+      expect(service.isDownloading.value, isFalse);
+      expect(service.downloadProgress.value, 0.0);
+      expect(service.downloadReceivedBytes.value, 0);
+      expect(service.downloadTotalBytes.value, 0);
+      expect(service.downloadedFilePath.value, isNull);
+      expect(service.downloadError.value, isNull);
+      expect(service.activeDownloadingRelease.value, isNull);
+
+      // cancelDownload resets isDownloading
+      service.isDownloading.value = true;
+      service.cancelDownload();
+      expect(service.isDownloading.value, isFalse);
+    });
   });
 }
