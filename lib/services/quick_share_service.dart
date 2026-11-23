@@ -17,6 +17,8 @@ class QuickShareHostInfo {
   final String ip;
   final int port;
   final QuickShareManifest manifest;
+  final List<String> availableIps;
+  final bool isHotspotHost;
 
   QuickShareHostInfo({
     required this.serverUrl,
@@ -24,6 +26,8 @@ class QuickShareHostInfo {
     required this.ip,
     required this.port,
     required this.manifest,
+    this.availableIps = const [],
+    this.isHotspotHost = false,
   });
 }
 
@@ -39,6 +43,7 @@ class QuickShareService {
   QuickShareManifest? _activeManifest;
   final Map<String, DownloadItem> _sharedItems = {};
   String? _currentServerUrl;
+  String? _lastSuccessfulServerUrl;
   int _serverPort = 0;
 
   // Upload progress notification for sender
@@ -49,44 +54,106 @@ class QuickShareService {
 
   bool get isHosting => _server != null;
   String? get currentServerUrl => _currentServerUrl;
+  String? get lastSuccessfulServerUrl => _lastSuccessfulServerUrl;
   QuickShareManifest? get activeManifest => _activeManifest;
 
+  static const int defaultHttpPort = 45678;
   static const int udpBeaconPort = 45679;
 
   /// Find all IPv4 local network addresses (Wi-Fi, hotspot, Ethernet)
   static Future<List<String>> getLocalIpAddresses() async {
-    final List<String> result = [];
+    final Set<String> result = {};
+
+    // 1. Probe known Hotspot Host IP addresses by attempting to bind a test socket.
+    // In Linux/Android/iOS socket APIs, binding to a specific non-loopback IP
+    // will only succeed if that IP is assigned to an active interface on this device.
+    // This allows detecting Android Hotspot (192.168.43.1) even when NetworkInterface.list()
+    // does not enumerate the hotspot interface (ap0/swlan0) due to OS sandboxing.
+    const knownHotspotIps = [
+      '192.168.43.1',  // Android standard Wi-Fi Hotspot
+      '192.168.44.1',  // Android secondary Hotspot
+      '192.168.49.1',  // Android Wi-Fi Direct (P2P)
+      '172.20.10.1',   // iOS Personal Hotspot
+      '192.168.50.1',  // Custom Android / Linux Hotspot
+      '192.168.137.1', // Windows Mobile Hotspot
+    ];
+
+    for (final hotspotIp in knownHotspotIps) {
+      if (await _isLocalAddress(hotspotIp)) {
+        result.add(hotspotIp);
+      }
+    }
+
+    // 2. Query NetworkInterface.list() and score interfaces
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLinkLocal: false,
       );
+
+      final List<MapEntry<String, int>> scoredEntries = [];
+
       for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        final isCellular = name.startsWith('rmnet') ||
+            name.startsWith('ccmni') ||
+            name.startsWith('pdp') ||
+            name.startsWith('radio') ||
+            name.startsWith('cellular');
+        final isHotspot = name.contains('ap') ||
+            name.contains('softap') ||
+            name.contains('swlan') ||
+            name.contains('tether') ||
+            name.contains('bridge') ||
+            name.contains('rndis');
+        final isWifi = name.contains('wlan') || name.contains('wifi') || name.contains('eth');
+
         for (final addr in iface.addresses) {
-          if (!addr.isLoopback && !result.contains(addr.address)) {
-            result.add(addr.address);
+          if (addr.isLoopback) continue;
+          final ip = addr.address;
+
+          int score = 0;
+          if (isHotspot || ip.startsWith('192.168.43.')) {
+            score = 100;
+          } else if (isWifi || ip.startsWith('192.168.')) {
+            score = 80;
+          } else if (ip.startsWith('10.') && !isCellular) {
+            score = 50;
+          } else if (ip.startsWith('172.') && !isCellular) {
+            score = 40;
+          } else if (isCellular) {
+            score = 10;
+          } else {
+            score = 20;
           }
+
+          scoredEntries.add(MapEntry(ip, score));
         }
+      }
+
+      scoredEntries.sort((a, b) => b.value.compareTo(a.value));
+      for (final entry in scoredEntries) {
+        result.add(entry.key);
       }
     } catch (e) {
       if (kDebugMode) print('[QuickShare] Error getting IP addresses: $e');
     }
 
-    // Sort IP addresses: prioritize common private LAN ranges (192.168.x.x, 10.x.x.x, 172.x.x.x)
-    result.sort((a, b) {
-      int score(String ip) {
-        if (ip.startsWith('192.168.')) return 3;
-        if (ip.startsWith('10.')) return 2;
-        if (ip.startsWith('172.')) return 1;
-        return 0;
-      }
-      return score(b).compareTo(score(a));
-    });
-
     if (result.isEmpty) {
       result.add('127.0.0.1');
     }
-    return result;
+
+    return result.toList();
+  }
+
+  static Future<bool> _isLocalAddress(String ip) async {
+    try {
+      final socket = await RawDatagramSocket.bind(InternetAddress(ip), 0);
+      socket.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Start Quick Share Server on Sender device
@@ -130,19 +197,33 @@ class QuickShareService {
     );
     _activeManifest = manifest;
 
-    // Bind HTTP server to random available port on all IPv4 interfaces
-    _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+    // Bind HTTP server to preferred port (45678) or random available port
+    try {
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, defaultHttpPort);
+    } catch (_) {
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
+    }
     _serverPort = _server!.port;
 
     final ips = await getLocalIpAddresses();
     final primaryIp = ips.first;
     _currentServerUrl = 'http://$primaryIp:$_serverPort';
 
-    // QR Payload formatted with serverUrl
+    final isHotspot = primaryIp == '192.168.43.1' ||
+        primaryIp == '192.168.44.1' ||
+        primaryIp == '192.168.49.1' ||
+        primaryIp == '172.20.10.1' ||
+        ips.contains('192.168.43.1');
+
+    final allServerUrls = ips.map((ip) => 'http://$ip:$_serverPort').toList();
+
+    // QR Payload formatted with serverUrl and candidate serverUrls
     final qrPayload = jsonEncode({
       'type': 'anime_quick_share',
       'version': 1,
       'serverUrl': _currentServerUrl,
+      'serverUrls': allServerUrls,
+      'isHotspot': isHotspot,
       'title': anime.title,
       'slug': anime.slug,
       'episodesCount': episodeManifestItems.length,
@@ -152,8 +233,8 @@ class QuickShareService {
     // Start listening to HTTP requests
     _startHttpListener();
 
-    // Start UDP Beacon broadcast on local Wi-Fi
-    _startBeaconBroadcast(primaryIp, _serverPort, anime.title, episodeManifestItems.length, effectiveDeviceName);
+    // Start UDP Beacon broadcast on local Wi-Fi and Hotspot subnets
+    _startBeaconBroadcast(ips, _serverPort, anime.title, episodeManifestItems.length, effectiveDeviceName);
 
     return QuickShareHostInfo(
       serverUrl: _currentServerUrl!,
@@ -161,6 +242,8 @@ class QuickShareService {
       ip: primaryIp,
       port: _serverPort,
       manifest: manifest,
+      availableIps: ips,
+      isHotspotHost: isHotspot,
     );
   }
 
@@ -264,7 +347,7 @@ class QuickShareService {
   }
 
   void _startBeaconBroadcast(
-    String ip,
+    List<String> ips,
     int port,
     String animeTitle,
     int epCount,
@@ -277,23 +360,36 @@ class QuickShareService {
       );
       _beaconBroadcastSocket?.broadcastEnabled = true;
 
+      final primaryIp = ips.first;
       final beaconData = jsonEncode({
         'type': 'anime_quick_share',
-        'serverUrl': 'http://$ip:$port',
+        'serverUrl': 'http://$primaryIp:$port',
+        'serverUrls': ips.map((ip) => 'http://$ip:$port').toList(),
         'title': animeTitle,
         'episodesCount': epCount,
         'deviceName': deviceName,
       });
       final bytes = utf8.encode(beaconData);
 
+      // Collect target broadcast addresses (universal + subnet broadcasts e.g. 192.168.43.255)
+      final Set<String> targetBroadcastAddresses = {'255.255.255.255', '192.168.43.255'};
+      for (final ip in ips) {
+        final lastDot = ip.lastIndexOf('.');
+        if (lastDot != -1 && !ip.startsWith('127.')) {
+          targetBroadcastAddresses.add('${ip.substring(0, lastDot)}.255');
+        }
+      }
+
       _beaconTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
-        try {
-          _beaconBroadcastSocket?.send(
-            bytes,
-            InternetAddress('255.255.255.255'),
-            udpBeaconPort,
-          );
-        } catch (_) {}
+        for (final target in targetBroadcastAddresses) {
+          try {
+            _beaconBroadcastSocket?.send(
+              bytes,
+              InternetAddress(target),
+              udpBeaconPort,
+            );
+          } catch (_) {}
+        }
       });
     } catch (e) {
       if (kDebugMode) print('[QuickShare] Error starting UDP beacon: $e');
@@ -323,7 +419,7 @@ class QuickShareService {
   // RECEIVER CLIENT LOGIC
   // ==========================================
 
-  /// Listen for nearby devices broadcasting on the local network
+  /// Listen for nearby devices broadcasting on the local network & probe hotspot host
   Stream<List<QuickShareNearbyDevice>> discoverNearbyDevices() async* {
     final Map<String, QuickShareNearbyDevice> discovered = {};
     RawDatagramSocket? socket;
@@ -342,14 +438,57 @@ class QuickShareService {
 
     final controller = StreamController<List<QuickShareNearbyDevice>>();
 
-    // Periodic cleanup of stale devices (> 5 seconds without beacon)
+    // Periodic cleanup of stale devices (> 6 seconds without beacon)
     final cleanupTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       final now = DateTime.now();
-      discovered.removeWhere((_, dev) => now.difference(dev.lastSeen).inSeconds > 5);
+      discovered.removeWhere((_, dev) => now.difference(dev.lastSeen).inSeconds > 6);
       if (!controller.isClosed) {
         controller.add(discovered.values.toList());
       }
     });
+
+    // Active Probe for Hotspot Host (when receiver client is connected to sender's hotspot)
+    Timer? hotspotProbeTimer;
+    void probeHotspotHost() async {
+      final candidateIps = <String>{'192.168.43.1', '192.168.44.1', '192.168.49.1', '172.20.10.1'};
+      try {
+        final myIps = await getLocalIpAddresses();
+        for (final myIp in myIps) {
+          final lastDot = myIp.lastIndexOf('.');
+          if (lastDot != -1 && !myIp.startsWith('127.')) {
+            candidateIps.add('${myIp.substring(0, lastDot)}.1');
+          }
+        }
+      } catch (_) {}
+
+      for (final hostIp in candidateIps) {
+        final url = 'http://$hostIp:$defaultHttpPort';
+        if (discovered.containsKey(url)) continue;
+
+        try {
+          final uri = Uri.parse('$url/quickshare/manifest');
+          final resp = await http.get(uri).timeout(const Duration(milliseconds: 900));
+          if (resp.statusCode == 200) {
+            final json = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+            final manifest = QuickShareManifest.fromMap(json);
+            discovered[url] = QuickShareNearbyDevice(
+              deviceName: '${manifest.deviceName} (Hotspot)',
+              animeTitle: manifest.anime.title,
+              episodesCount: manifest.sharedEpisodes.length,
+              serverUrl: url,
+              lastSeen: DateTime.now(),
+            );
+            if (!controller.isClosed) {
+              controller.add(discovered.values.toList());
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Run active probe immediately and every 2.5 seconds
+    probeHotspotHost();
+    hotspotProbeTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) => probeHotspotHost());
 
     socket.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
@@ -382,9 +521,36 @@ class QuickShareService {
       yield* controller.stream;
     } finally {
       cleanupTimer.cancel();
+      hotspotProbeTimer.cancel();
       socket.close();
       await controller.close();
     }
+  }
+
+  /// Parse QR code string or URL into list of candidate server URLs
+  static List<String> parseServerUrls(String raw) {
+    final List<String> urls = [];
+    String clean = raw.trim();
+    if (clean.startsWith('{') && clean.endsWith('}')) {
+      try {
+        final json = jsonDecode(clean) as Map<String, dynamic>;
+        if (json.containsKey('serverUrls') && json['serverUrls'] is List) {
+          for (final u in json['serverUrls']) {
+            final parsed = parseServerUrlFromQr(u.toString());
+            if (!urls.contains(parsed)) urls.add(parsed);
+          }
+        }
+        if (json.containsKey('serverUrl')) {
+          final parsed = parseServerUrlFromQr(json['serverUrl'].toString());
+          if (!urls.contains(parsed)) urls.insert(0, parsed);
+        }
+      } catch (_) {}
+    }
+
+    if (urls.isEmpty) {
+      urls.add(parseServerUrlFromQr(clean));
+    }
+    return urls;
   }
 
   /// Parse QR code string or URL into clean server URL
@@ -411,18 +577,26 @@ class QuickShareService {
     return clean;
   }
 
-  /// Fetch manifest from sender server
+  /// Fetch manifest from sender server (tries candidate URLs if multiple are given)
   Future<QuickShareManifest> fetchManifest(String serverUrl) async {
-    final cleanUrl = parseServerUrlFromQr(serverUrl);
-    final uri = Uri.parse('$cleanUrl/quickshare/manifest');
+    final candidateUrls = parseServerUrls(serverUrl);
+    Exception? lastError;
 
-    final response = await http.get(uri).timeout(const Duration(seconds: 8));
-    if (response.statusCode != 200) {
-      throw Exception('ไม่สามารถเชื่อมต่อเครื่องผู้ส่งได้ (รหัส: ${response.statusCode})');
+    for (final cleanUrl in candidateUrls) {
+      try {
+        final uri = Uri.parse('$cleanUrl/quickshare/manifest');
+        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final jsonMap = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          _lastSuccessfulServerUrl = cleanUrl;
+          return QuickShareManifest.fromMap(jsonMap);
+        }
+      } catch (e) {
+        lastError = Exception('ไม่สามารถเชื่อมต่อเครื่องผู้ส่ง ($cleanUrl): $e');
+      }
     }
 
-    final jsonMap = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    return QuickShareManifest.fromMap(jsonMap);
+    throw lastError ?? Exception('ไม่สามารถเชื่อมต่อเครื่องผู้ส่งได้');
   }
 
   /// Transfer selected episodes to Receiver device and save to Isar and DownloadProvider

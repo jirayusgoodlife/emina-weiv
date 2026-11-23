@@ -113,12 +113,22 @@ void main() {
       final jsonQr = jsonEncode({
         'type': 'anime_quick_share',
         'serverUrl': 'http://192.168.1.99:54321',
+        'serverUrls': ['http://192.168.43.1:54321', 'http://192.168.1.99:54321'],
         'title': 'Test Anime',
       });
       expect(
         QuickShareService.parseServerUrlFromQr(jsonQr),
         'http://192.168.1.99:54321',
       );
+
+      final candidateUrls = QuickShareService.parseServerUrls(jsonQr);
+      expect(candidateUrls.contains('http://192.168.43.1:54321'), isTrue);
+      expect(candidateUrls.contains('http://192.168.1.99:54321'), isTrue);
+    });
+
+    test('QuickShareService.getLocalIpAddresses returns non-empty list of IPs', () async {
+      final ips = await QuickShareService.getLocalIpAddresses();
+      expect(ips.isNotEmpty, isTrue);
     });
   });
 

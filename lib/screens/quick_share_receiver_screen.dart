@@ -77,7 +77,23 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
   }
 
   Future<void> _manualInputUrl() async {
-    final textController = TextEditingController(text: 'http://192.168.1.');
+    // Check if we can prefill with hotspot host IP or local gateway
+    final localIps = await QuickShareService.getLocalIpAddresses();
+    String defaultIp = '192.168.43.1';
+    for (final ip in localIps) {
+      if (ip.startsWith('192.168.43.')) {
+        defaultIp = '192.168.43.1';
+        break;
+      } else {
+        final lastDot = ip.lastIndexOf('.');
+        if (lastDot != -1 && !ip.startsWith('127.')) {
+          defaultIp = '${ip.substring(0, lastDot)}.1';
+        }
+      }
+    }
+    final textController = TextEditingController(
+        text: 'http://$defaultIp:${QuickShareService.defaultHttpPort}');
+    if (!mounted) return;
     final url = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -144,12 +160,14 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
 
     try {
       final manifest = await _quickShare.fetchManifest(rawUrl);
+      final workingUrl = _quickShare.lastSuccessfulServerUrl ??
+          QuickShareService.parseServerUrlFromQr(rawUrl);
       if (mounted) {
         setState(() {
           _isConnecting = false;
           _activeManifest = manifest;
         });
-        _showTransferConfirmSheet(rawUrl, manifest);
+        _showTransferConfirmSheet(workingUrl, manifest);
       }
     } catch (e) {
       if (mounted) {
@@ -899,10 +917,10 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white10),
               ),
-              child: const Center(
+              child: Center(
                 child: Column(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 28,
                       height: 28,
                       child: CircularProgressIndicator(
@@ -910,16 +928,37 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
                         color: AppTheme.accent,
                       ),
                     ),
-                    SizedBox(height: 14),
-                    Text(
+                    const SizedBox(height: 14),
+                    const Text(
                       'กำลังค้นหาอุปกรณ์ใกล้เคียงที่กำลังเปิดแชร์...',
                       style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    SizedBox(height: 6),
-                    Text(
+                    const SizedBox(height: 6),
+                    const Text(
                       'ตรวจสอบให้แน่ใจว่าทั้งสองเครื่องเชื่อมต่อ Wi-Fi เดียวกัน หรือกดปุ่ม "สแกน QR Code" ด้านบน',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white38, fontSize: 11.5),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => _connectToServer(
+                          'http://192.168.43.1:${QuickShareService.defaultHttpPort}'),
+                      icon: const Icon(Icons.wifi_tethering,
+                          color: Colors.orangeAccent, size: 18),
+                      label: const Text(
+                        'เชื่อมต่อ Hotspot ด่วน (192.168.43.1)',
+                        style: TextStyle(
+                            color: Colors.orangeAccent, fontSize: 13),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                            color: Colors.orangeAccent.withOpacity(0.5)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                      ),
                     ),
                   ],
                 ),

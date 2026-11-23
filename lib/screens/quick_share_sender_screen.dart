@@ -315,6 +315,39 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
 
                               const SizedBox(height: 16),
 
+                              if (_hostInfo!.isHotspotHost ||
+                                  _hostInfo!.ip == '192.168.43.1') ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 6),
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: Colors.orange.withOpacity(0.4)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.wifi_tethering,
+                                          size: 16, color: Colors.orangeAccent),
+                                      SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          'โหมด Hotspot: ให้อีกเครื่องต่อ Wi-Fi ฮอตสปอตนี้',
+                                          style: TextStyle(
+                                            color: Colors.orangeAccent,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+
                               // IP Address & Copy
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -327,8 +360,15 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.wifi,
-                                        size: 16, color: AppTheme.accent),
+                                    Icon(
+                                      _hostInfo!.isHotspotHost
+                                          ? Icons.wifi_tethering
+                                          : Icons.wifi,
+                                      size: 16,
+                                      color: _hostInfo!.isHotspotHost
+                                          ? Colors.orangeAccent
+                                          : AppTheme.accent,
+                                    ),
                                     const SizedBox(width: 8),
                                     SelectableText(
                                       _hostInfo!.serverUrl,
