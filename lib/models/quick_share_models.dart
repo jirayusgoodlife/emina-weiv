@@ -33,8 +33,8 @@ extension AnimeCollectionJson on AnimeCollection {
     }
     if (map['episodes'] is List) {
       anime.episodes = (map['episodes'] as List)
-          .whereType<Map<String, dynamic>>()
-          .map((e) => EpisodeEmbeddedJson.fromMap(e))
+          .whereType<Map>()
+          .map((e) => EpisodeEmbeddedJson.fromMap(Map<String, dynamic>.from(e)))
           .toList();
     }
     anime.updatedAt = DateTime.now();
@@ -149,8 +149,8 @@ class QuickShareManifest {
         anime: AnimeCollectionJson.fromMap(
             Map<String, dynamic>.from(map['anime'] as Map? ?? {})),
         sharedEpisodes: ((map['sharedEpisodes'] as List<dynamic>?) ?? [])
-            .whereType<Map<String, dynamic>>()
-            .map((e) => QuickShareEpisodeItem.fromMap(e))
+            .whereType<Map>()
+            .map((e) => QuickShareEpisodeItem.fromMap(Map<String, dynamic>.from(e)))
             .toList(),
       );
 }
@@ -160,6 +160,7 @@ class QuickShareNearbyDevice {
   final String animeTitle;
   final int episodesCount;
   final String serverUrl;
+  final List<String> candidateUrls;
   final DateTime lastSeen;
 
   QuickShareNearbyDevice({
@@ -167,6 +168,7 @@ class QuickShareNearbyDevice {
     required this.animeTitle,
     required this.episodesCount,
     required this.serverUrl,
+    this.candidateUrls = const [],
     required this.lastSeen,
   });
 }

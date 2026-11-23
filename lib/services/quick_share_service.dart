@@ -264,16 +264,22 @@ class QuickShareService {
         }
 
         if (path == '/quickshare/manifest') {
-          request.response.headers.contentType = ContentType.json;
+          request.response.headers.contentType =
+              ContentType('application', 'json', charset: 'utf-8');
           final jsonStr = jsonEncode(_activeManifest?.toMap() ?? {});
-          request.response.write(jsonStr);
+          final bytes = utf8.encode(jsonStr);
+          request.response.headers.contentLength = bytes.length;
+          request.response.add(bytes);
           await request.response.close();
           return;
         }
 
         if (path == '/quickshare/ping') {
-          request.response.headers.contentType = ContentType.json;
-          request.response.write(jsonEncode({'status': 'ok', 'app': 'AnimeView'}));
+          request.response.headers.contentType =
+              ContentType('application', 'json', charset: 'utf-8');
+          final bytes = utf8.encode(jsonEncode({'status': 'ok', 'app': 'AnimeView'}));
+          request.response.headers.contentLength = bytes.length;
+          request.response.add(bytes);
           await request.response.close();
           return;
         }
@@ -363,6 +369,7 @@ class QuickShareService {
       final primaryIp = ips.first;
       final beaconData = jsonEncode({
         'type': 'anime_quick_share',
+        'port': port,
         'serverUrl': 'http://$primaryIp:$port',
         'serverUrls': ips.map((ip) => 'http://$ip:$port').toList(),
         'title': animeTitle,
@@ -498,18 +505,47 @@ class QuickShareService {
             final str = utf8.decode(dg.data);
             final json = jsonDecode(str) as Map<String, dynamic>;
             if (json['type'] == 'anime_quick_share') {
-              final serverUrl = json['serverUrl']?.toString() ?? '';
-              if (serverUrl.isNotEmpty) {
-                discovered[serverUrl] = QuickShareNearbyDevice(
-                  deviceName: json['deviceName']?.toString() ?? 'AnimeView Device',
-                  animeTitle: json['title']?.toString() ?? 'อนิเมะ',
-                  episodesCount: (json['episodesCount'] as num?)?.toInt() ?? 1,
-                  serverUrl: serverUrl,
-                  lastSeen: DateTime.now(),
-                );
-                if (!controller.isClosed) {
-                  controller.add(discovered.values.toList());
+              final senderIpFromSocket = dg.address.address;
+              final port = (json['port'] as num?)?.toInt() ??
+                  Uri.tryParse(json['serverUrl']?.toString() ?? '')?.port ??
+                  defaultHttpPort;
+
+              final candidateUrls = <String>[];
+              // 1. Direct IP of socket that delivered UDP (HIGHEST PRIORITY - guaranteed on this network!)
+              candidateUrls.add('http://$senderIpFromSocket:$port');
+
+              // 2. Candidate server URLs from payload
+              if (json['serverUrls'] is List) {
+                for (final u in json['serverUrls']) {
+                  final parsed = parseServerUrlFromQr(u.toString());
+                  if (!candidateUrls.contains(parsed)) {
+                    candidateUrls.add(parsed);
+                  }
                 }
+              }
+
+              // 3. Fallback serverUrl from payload
+              final rawServerUrl = json['serverUrl']?.toString() ?? '';
+              if (rawServerUrl.isNotEmpty) {
+                final parsed = parseServerUrlFromQr(rawServerUrl);
+                if (!candidateUrls.contains(parsed)) {
+                  candidateUrls.add(parsed);
+                }
+              }
+
+              final primaryUrl = candidateUrls.first;
+              final deviceKey = '$senderIpFromSocket:$port';
+
+              discovered[deviceKey] = QuickShareNearbyDevice(
+                deviceName: json['deviceName']?.toString() ?? 'AnimeView Device',
+                animeTitle: json['title']?.toString() ?? 'อนิเมะ',
+                episodesCount: (json['episodesCount'] as num?)?.toInt() ?? 1,
+                serverUrl: primaryUrl,
+                candidateUrls: candidateUrls,
+                lastSeen: DateTime.now(),
+              );
+              if (!controller.isClosed) {
+                controller.add(discovered.values.toList());
               }
             }
           } catch (_) {}
@@ -578,21 +614,35 @@ class QuickShareService {
   }
 
   /// Fetch manifest from sender server (tries candidate URLs if multiple are given)
-  Future<QuickShareManifest> fetchManifest(String serverUrl) async {
-    final candidateUrls = parseServerUrls(serverUrl);
+  Future<QuickShareManifest> fetchManifest(
+    String serverUrl, {
+    List<String>? candidateUrls,
+  }) async {
+    final allCandidates = <String>[];
+    if (candidateUrls != null && candidateUrls.isNotEmpty) {
+      allCandidates.addAll(candidateUrls);
+    }
+    for (final u in parseServerUrls(serverUrl)) {
+      if (!allCandidates.contains(u)) allCandidates.add(u);
+    }
+
     Exception? lastError;
 
-    for (final cleanUrl in candidateUrls) {
+    for (final cleanUrl in allCandidates) {
       try {
         final uri = Uri.parse('$cleanUrl/quickshare/manifest');
-        final response = await http.get(uri).timeout(const Duration(seconds: 4));
+        final response =
+            await http.get(uri).timeout(const Duration(milliseconds: 2500));
         if (response.statusCode == 200) {
-          final jsonMap = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+          final jsonMap =
+              jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
           _lastSuccessfulServerUrl = cleanUrl;
           return QuickShareManifest.fromMap(jsonMap);
+        } else {
+          lastError = Exception('เซิร์ฟเวอร์ตอบกลับรหัส: ${response.statusCode} ($cleanUrl)');
         }
       } catch (e) {
-        lastError = Exception('ไม่สามารถเชื่อมต่อเครื่องผู้ส่ง ($cleanUrl): $e');
+        lastError = Exception('ไม่สามารถเชื่อมต่อ ($cleanUrl): $e');
       }
     }
 

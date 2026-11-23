@@ -152,40 +152,62 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
     }
   }
 
-  Future<void> _connectToServer(String rawUrl) async {
+  Future<void> _connectToServer(
+    String rawUrl, {
+    List<String>? candidateUrls,
+  }) async {
     setState(() {
       _isConnecting = true;
       _statusError = null;
     });
 
     try {
-      final manifest = await _quickShare.fetchManifest(rawUrl);
+      final manifest = await _quickShare.fetchManifest(
+        rawUrl,
+        candidateUrls: candidateUrls,
+      );
+      if (!mounted) return;
+
       final workingUrl = _quickShare.lastSuccessfulServerUrl ??
           QuickShareService.parseServerUrlFromQr(rawUrl);
-      if (mounted) {
-        setState(() {
-          _isConnecting = false;
-          _activeManifest = manifest;
-        });
-        _showTransferConfirmSheet(workingUrl, manifest);
-      }
+
+      final isarService = Provider.of<IsarService>(context, listen: false);
+      final existingAnime = await isarService.getAnimeBySlug(manifest.anime.slug);
+      if (!mounted) return;
+      final isNewAnime = existingAnime == null;
+
+      setState(() {
+        _isConnecting = false;
+        _activeManifest = manifest;
+      });
+      _showTransferConfirmSheet(workingUrl, manifest, isNewAnime: isNewAnime);
     } catch (e) {
       if (mounted) {
+        final errText = e.toString().replaceAll('Exception: ', '');
         setState(() {
           _isConnecting = false;
-          _statusError = e.toString().replaceAll('Exception: ', '');
+          _statusError = errText;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('เกิดข้อผิดพลาดในการดึงข้อมูล: $errText'),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
     }
   }
 
-  void _showTransferConfirmSheet(String serverUrl, QuickShareManifest manifest) async {
+  void _showTransferConfirmSheet(
+    String serverUrl,
+    QuickShareManifest manifest, {
+    bool isNewAnime = true,
+  }) {
     final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
     final isarService = Provider.of<IsarService>(context, listen: false);
     final downloadProv = Provider.of<DownloadProvider>(context, listen: false);
-
-    final existingAnime = await isarService.getAnimeBySlug(manifest.anime.slug);
-    final isNewAnime = existingAnime == null;
 
     final selectedEpIds = manifest.sharedEpisodes.map((e) => e.episodeId).toSet();
 
@@ -244,16 +266,23 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: CachedNetworkImage(
-                            imageUrl: manifest.anime.coverUrl,
-                            width: 65,
-                            height: 90,
-                            fit: BoxFit.cover,
-                            placeholder: (_, __) =>
-                                Container(color: AppTheme.cardLight),
-                            errorWidget: (_, __, ___) =>
-                                const Icon(Icons.movie, color: Colors.white30),
-                          ),
+                          child: manifest.anime.coverUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: manifest.anime.coverUrl,
+                                  width: 65,
+                                  height: 90,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) =>
+                                      Container(color: AppTheme.cardLight),
+                                  errorWidget: (_, __, ___) =>
+                                      const Icon(Icons.movie, color: Colors.white30),
+                                )
+                              : Container(
+                                  width: 65,
+                                  height: 90,
+                                  color: AppTheme.cardLight,
+                                  child: const Icon(Icons.movie, color: Colors.white30),
+                                ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -1019,7 +1048,7 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton(
-                        onPressed: () => _connectToServer(dev.serverUrl),
+                        onPressed: () => _connectToServer(dev.serverUrl, candidateUrls: dev.candidateUrls),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.accent,
                           foregroundColor: Colors.white,
