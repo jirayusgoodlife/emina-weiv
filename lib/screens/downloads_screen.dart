@@ -6,6 +6,8 @@ import '../models/isar_models.dart';
 import '../providers/anime_catalog_provider.dart';
 import '../providers/download_provider.dart';
 import '../screens/player_screen.dart';
+import '../screens/quick_share_receiver_screen.dart';
+import '../widgets/quick_share_dialogs.dart';
 import '../theme/app_theme.dart';
 
 class DownloadsScreen extends StatefulWidget {
@@ -52,6 +54,11 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               onPressed: () => _confirmDeleteAllFailed(context, downloadProvider),
             ),
           ],
+          IconButton(
+            icon: const Icon(Icons.wifi_tethering, color: AppTheme.accent),
+            tooltip: 'Quick Share (แชร์/รับหนังออฟไลน์)',
+            onPressed: () => _showQuickShareHubSheet(context, downloadProvider),
+          ),
           IconButton(
             icon: const Icon(Icons.speed, color: AppTheme.accent),
             tooltip: 'ความเร็วและการดาวน์โหลดพร้อมกัน (${downloadProvider.maxConcurrentDownloads} ตอน)',
@@ -603,6 +610,12 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 ),
 
                 const SizedBox(width: 4),
+                if (group.completedCount > 0)
+                  IconButton(
+                    icon: const Icon(Icons.wifi_tethering, color: AppTheme.accent, size: 20),
+                    tooltip: 'Quick Share เรื่องนี้ไปยังเครื่องอื่น',
+                    onPressed: () => _quickShareAnimeGroup(context, group),
+                  ),
                 IconButton(
                   icon: const Icon(Icons.more_time, color: AppTheme.accent, size: 20),
                   tooltip: 'ตั้งเวลาจัดเก็บทั้งเรื่อง',
@@ -815,6 +828,292 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
+  void _quickShareAnimeGroup(BuildContext context, DownloadedAnimeGroup group) {
+    final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+    final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+    final anime = realAnime ?? (AnimeCollection()
+      ..slug = group.animeSlug
+      ..title = group.animeTitle
+      ..coverUrl = group.animeCoverUrl);
+
+    final completed = group.episodes.where((e) => e.isCompleted).toList();
+    QuickShareDialogs.showSelectAndShareSheet(
+      context,
+      anime: anime,
+      completedItems: completed,
+    );
+  }
+
+  void _showQuickShareHubSheet(BuildContext context, DownloadProvider provider) {
+    final completedGroups = provider.animeGroups.where((g) => g.completedCount > 0).toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          decoration: const BoxDecoration(
+            color: Color(0xFF141824),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Row(
+                  children: [
+                    Icon(Icons.wifi_tethering, color: AppTheme.accent, size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Quick Share (Local Network)',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'ถ่ายโอนหนังและตอนที่โหลดแล้วแบบ P2P ผ่าน Wi-Fi ท้องถิ่นโดยไม่ต้องใช้อินเทอร์เน็ต',
+                  style: TextStyle(color: Colors.white60, fontSize: 12.5),
+                ),
+                const SizedBox(height: 20),
+
+                // Option 1: Send
+                InkWell(
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    if (completedGroups.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('ยังไม่มีหนังหรือตอนที่ดาวน์โหลดสำเร็จเพื่อแชร์'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+                    if (completedGroups.length == 1) {
+                      _quickShareAnimeGroup(context, completedGroups.first);
+                    } else {
+                      _showPickAnimeToShareSheet(context, completedGroups);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.upload_rounded, color: AppTheme.accent, size: 26),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ส่งหนังที่โหลดไว้ (Send)',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'มี ${completedGroups.length} เรื่องพร้อมแชร์ • สร้าง QR Code และแชร์ผ่าน Wi-Fi',
+                                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: Colors.white30, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Option 2: Receive
+                InkWell(
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const QuickShareReceiverScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.download_rounded, color: AppTheme.accent, size: 26),
+                        ),
+                        const SizedBox(width: 16),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'รับหนังจากเครื่องอื่น (Receive)',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'สแกน QR Code หรือค้นหาอุปกรณ์ที่แชร์อยู่ในเครือข่าย',
+                                style: TextStyle(color: Colors.white60, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, color: AppTheme.accent, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPickAnimeToShareSheet(BuildContext context, List<DownloadedAnimeGroup> groups) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          decoration: const BoxDecoration(
+            color: Color(0xFF141824),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'เลือกเรื่องที่ต้องการแชร์',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: groups.length,
+                  itemBuilder: (c, idx) {
+                    final g = groups[idx];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: ListTile(
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: CachedNetworkImage(
+                            imageUrl: g.animeCoverUrl,
+                            width: 38,
+                            height: 52,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(color: AppTheme.cardLight),
+                            errorWidget: (_, __, ___) => const Icon(Icons.movie, color: Colors.white30),
+                          ),
+                        ),
+                        title: Text(
+                          g.animeTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          '${g.completedCount} ตอนที่โหลดแล้ว • ${g.formattedTotalSize}',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11.5),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white30, size: 14),
+                        onTap: () {
+                          Navigator.of(ctx).pop();
+                          _quickShareAnimeGroup(context, g);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _confirmDeleteAllFailed(BuildContext context, DownloadProvider provider) {
     final count = provider.failedDownloads.length;
     showDialog(
@@ -927,6 +1226,22 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const QuickShareReceiverScreen()),
+                );
+              },
+              icon: const Icon(Icons.wifi_tethering, color: AppTheme.accent),
+              label: const Text('รับหนังจากเครื่องอื่นผ่าน Quick Share'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.accent,
+                side: const BorderSide(color: AppTheme.accent),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ],
         ),
       ),
@@ -989,6 +1304,26 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                     ),
                   );
                 }
+              },
+            ),
+          if (group.completedCount > 0)
+            IconButton(
+              icon: const Icon(Icons.wifi_tethering, color: AppTheme.accent),
+              tooltip: 'Quick Share เรื่องนี้ไปยังเครื่องอื่น',
+              onPressed: () {
+                final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+                final anime = realAnime ?? AnimeCollection()
+                  ..slug = group.animeSlug
+                  ..title = group.animeTitle
+                  ..coverUrl = group.animeCoverUrl;
+
+                final completed = group.episodes.where((e) => e.isCompleted).toList();
+                QuickShareDialogs.showSelectAndShareSheet(
+                  context,
+                  anime: anime,
+                  completedItems: completed,
+                );
               },
             ),
           IconButton(
@@ -1548,11 +1883,41 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
             const Divider(color: Colors.white10, height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _confirmRedownloadEpisode(context, item, group, provider),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                        final realAnime = catalog.allAnime.where((a) => a.slug == group.animeSlug).firstOrNull;
+                        final anime = realAnime ?? AnimeCollection()
+                          ..slug = group.animeSlug
+                          ..title = group.animeTitle
+                          ..coverUrl = group.animeCoverUrl;
+
+                        QuickShareDialogs.shareSingleEpisode(
+                          context,
+                          anime: anime,
+                          item: item,
+                        );
+                      },
+                      icon: const Icon(Icons.wifi_tethering, size: 16, color: AppTheme.accent),
+                      label: const Text(
+                        'Quick Share',
+                        style: TextStyle(
+                          color: AppTheme.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    TextButton.icon(
+                      onPressed: () => _confirmRedownloadEpisode(context, item, group, provider),
                     icon: Icon(
                       Icons.refresh,
                       size: 16,
@@ -1603,7 +1968,8 @@ class DownloadedAnimeDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-          ] else if (isFailed) ...[
+          ),
+        ] else if (isFailed) ...[
             const Divider(color: Colors.white10, height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

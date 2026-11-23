@@ -226,4 +226,41 @@ class IsarService {
       await _isar.animeCollections.delete(id);
     });
   }
+
+  // Save or update anime (e.g. from Quick Share)
+  Future<void> saveOrUpdateAnime(AnimeCollection animeToSave) async {
+    await _isar.writeTxn(() async {
+      final existing = await _isar.animeCollections
+          .filter()
+          .slugEqualTo(animeToSave.slug)
+          .findFirst();
+
+      if (existing != null) {
+        existing.title = animeToSave.title;
+        existing.coverUrl = animeToSave.coverUrl;
+        existing.backdropUrl = animeToSave.backdropUrl ?? existing.backdropUrl;
+        existing.synopsis = animeToSave.synopsis ?? existing.synopsis;
+        existing.rating = animeToSave.rating ?? existing.rating;
+        existing.status = animeToSave.status ?? existing.status;
+        existing.year = animeToSave.year ?? existing.year;
+        existing.sourceUrl = animeToSave.sourceUrl ?? existing.sourceUrl;
+        if (animeToSave.genres.isNotEmpty) {
+          existing.genres = List<String>.from(animeToSave.genres);
+        }
+
+        // Merge episodes
+        final existingEpMap = {for (final e in existing.episodes) e.id: e};
+        for (final ep in animeToSave.episodes) {
+          if (!existingEpMap.containsKey(ep.id)) {
+            existing.episodes.add(ep);
+          }
+        }
+        existing.updatedAt = DateTime.now();
+        await _isar.animeCollections.put(existing);
+      } else {
+        animeToSave.updatedAt = DateTime.now();
+        await _isar.animeCollections.put(animeToSave);
+      }
+    });
+  }
 }

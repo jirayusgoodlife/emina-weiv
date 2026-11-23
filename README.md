@@ -15,6 +15,7 @@
 ### 📱 Flutter Mobile App
 - **High-Performance Streaming**: Smooth playback of direct MP4 and HLS (`.m3u8`) video streams.
 - **Offline Download Manager**: Download episodes with multi-threaded downloads (via Dio) for offline watching anytime.
+- **Offline Quick Share (Local Wi-Fi P2P)**: ถ่ายโอนหนังและตอนที่ดาวน์โหลดแล้วระหว่าง 2 เครื่องผ่าน Local Network ได้โดยตรง ไม่ต้องต่ออินเทอร์เน็ต สามารถแชร์ได้ทั้งเรื่องหรือเฉพาะตอนที่เลือก และหากเครื่องผู้รับยังไม่มีเรื่องนี้ในคลัง ระบบจะเพิ่มเรื่องใหม่เข้า Isar DB ให้อัตโนมัติ พร้อมสแกน QR Code หรือค้นหาอุปกรณ์ใกล้เคียงได้ทันที
 - **Embedded In-App Stream Proxy**: Runs an internal proxy on `127.0.0.1` inside your device to strip obfuscated headers (e.g., fake PNG/WebP wrappers around MPEG-TS chunks) and bypass anti-hotlinking protections seamlessly.
 - **Picture-in-Picture (PiP)**: Keep watching in a floating window while multitasking across other apps.
 - **Smart Next Episode & Watch Progress**: Automatically tracks watch timestamps via local [Isar Database](https://isar.dev) and surfaces a 1-tap "Next Episode" button near the end of playback.

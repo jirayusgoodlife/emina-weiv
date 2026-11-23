@@ -8,6 +8,7 @@ import '../providers/download_provider.dart';
 import '../screens/player_screen.dart';
 import '../screens/downloads_screen.dart';
 import '../widgets/anime_action_sheet.dart';
+import '../widgets/quick_share_dialogs.dart';
 import '../theme/app_theme.dart';
 
 class DetailScreen extends StatelessWidget {
@@ -66,6 +67,29 @@ class DetailScreen extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
+              if (downloadProvider.getDownloadedEpisodesCount(currentAnime) > 0)
+                IconButton(
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.wifi_tethering, color: AppTheme.accent, size: 20),
+                  ),
+                  tooltip: 'Quick Share (${downloadProvider.getDownloadedEpisodesCount(currentAnime)} ตอนที่โหลดแล้ว)',
+                  onPressed: () {
+                    final completedItems = currentAnime.episodes
+                        .where((e) => e.id != null && downloadProvider.isDownloaded(e.id!))
+                        .map((e) => downloadProvider.getDownload(e.id!)!)
+                        .toList();
+                    QuickShareDialogs.showSelectAndShareSheet(
+                      context,
+                      anime: currentAnime,
+                      completedItems: completedItems,
+                    );
+                  },
+                ),
               PopupMenuButton<String>(
                 icon: Container(
                   padding: const EdgeInsets.all(6),
@@ -173,6 +197,16 @@ class DetailScreen extends StatelessWidget {
                         ),
                       );
                     }
+                  } else if (value == 'quick_share') {
+                    final completedItems = currentAnime.episodes
+                        .where((e) => e.id != null && downloadProvider.isDownloaded(e.id!))
+                        .map((e) => downloadProvider.getDownload(e.id!)!)
+                        .toList();
+                    QuickShareDialogs.showSelectAndShareSheet(
+                      context,
+                      anime: currentAnime,
+                      completedItems: completedItems,
+                    );
                   } else if (value == 'delete') {
                     AnimeActionSheet.showDeleteConfirmDialog(
                       context,
@@ -260,6 +294,21 @@ class DetailScreen extends StatelessWidget {
                             Text(
                               'ดาวน์โหลดใหม่ทุกตอน',
                               style: TextStyle(color: AppTheme.textMain, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (downloadProvider.getDownloadedEpisodesCount(currentAnime) > 0) ...[
+                      PopupMenuItem(
+                        value: 'quick_share',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.wifi_tethering, color: AppTheme.accent, size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Quick Share (${downloadProvider.getDownloadedEpisodesCount(currentAnime)} ตอนที่โหลดแล้ว)',
+                              style: const TextStyle(color: AppTheme.textMain, fontSize: 14),
                             ),
                           ],
                         ),
@@ -1272,6 +1321,31 @@ class DetailScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.white38, fontSize: 11),
               ),
               const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    final catalogProv = Provider.of<AnimeCatalogProvider>(context, listen: false);
+                    final realAnime = catalogProv.allAnime.where((a) => a.slug == item.animeSlug).firstOrNull;
+                    final animeToShare = realAnime ?? anime;
+                    QuickShareDialogs.shareSingleEpisode(
+                      context,
+                      anime: animeToShare,
+                      item: item,
+                    );
+                  },
+                  icon: const Icon(Icons.wifi_tethering, size: 18),
+                  label: const Text('Quick Share ตอนนี้ (ออฟไลน์)', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(

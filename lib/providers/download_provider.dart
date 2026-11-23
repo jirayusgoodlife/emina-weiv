@@ -328,6 +328,14 @@ class DownloadProvider extends ChangeNotifier {
     }
   }
 
+  /// Add a completed download directly (e.g. from Quick Share local transfer)
+  Future<void> addCompletedDownload(DownloadItem item) async {
+    _downloads[item.episodeId] = item;
+    await _saveToPrefs();
+    await refreshStorageSpace();
+    notifyListeners();
+  }
+
   /// สลับหรือตั้งค่าว่าตอนนี้จะไม่ลบ จนกว่าจะลบเอง (Keep indefinitely)
   Future<void> setEpisodeKeepForever(String episodeId, bool keepForever) async {
     final item = _downloads[episodeId];

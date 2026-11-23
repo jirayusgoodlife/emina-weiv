@@ -6,6 +6,7 @@ import '../providers/anime_catalog_provider.dart';
 import '../providers/download_provider.dart';
 import '../screens/detail_screen.dart';
 import '../screens/downloads_screen.dart';
+import 'quick_share_dialogs.dart';
 import '../theme/app_theme.dart';
 
 class AnimeActionSheet {
@@ -373,6 +374,46 @@ class _AnimeActionSheetWidget extends StatelessWidget {
                         );
                       }
                     }
+                  },
+                );
+              },
+            ),
+
+            Consumer<DownloadProvider>(
+              builder: (context, dlProv, _) {
+                final downloadedCount = dlProv.getDownloadedEpisodesCount(anime);
+                if (downloadedCount <= 0) return const SizedBox.shrink();
+
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.wifi_tethering, color: AppTheme.accent, size: 22),
+                  ),
+                  title: Text(
+                    'Quick Share ($downloadedCount ตอนที่โหลดแล้ว)',
+                    style: const TextStyle(color: AppTheme.textMain, fontSize: 14),
+                  ),
+                  subtitle: const Text(
+                    'แชร์ไฟล์หนังผ่าน Wi-Fi ท้องถิ่นไปยังอีกเครื่องแบบออฟไลน์',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    final completedItems = anime.episodes
+                        .where((e) => e.id != null && dlProv.isDownloaded(e.id!))
+                        .map((e) => dlProv.getDownload(e.id!)!)
+                        .toList();
+                    QuickShareDialogs.showSelectAndShareSheet(
+                      context,
+                      anime: anime,
+                      completedItems: completedItems,
+                    );
                   },
                 );
               },
