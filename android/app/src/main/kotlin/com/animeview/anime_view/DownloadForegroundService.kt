@@ -85,6 +85,7 @@ class DownloadForegroundService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var notificationManager: NotificationManager? = null
 
     override fun onCreate() {
@@ -97,6 +98,14 @@ class DownloadForegroundService : Service() {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "anime_view:download_wakelock").apply {
                 setReferenceCounted(false)
                 acquire(120 * 60 * 1000L) // 2 hours safety timeout
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            wifiLock = wifiManager?.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "anime_view:download_wifilock")?.apply {
+                setReferenceCounted(false)
+                acquire()
             }
         } catch (_: Exception) {}
     }
@@ -153,6 +162,11 @@ class DownloadForegroundService : Service() {
         try {
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
             }
         } catch (_: Exception) {}
 
@@ -253,6 +267,11 @@ class DownloadForegroundService : Service() {
         try {
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        try {
+            if (wifiLock?.isHeld == true) {
+                wifiLock?.release()
             }
         } catch (_: Exception) {}
     }

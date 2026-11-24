@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/download_item.dart';
 import '../models/isar_models.dart';
 import '../models/quick_share_models.dart';
+import '../services/download_background_service.dart';
 import '../services/quick_share_service.dart';
 import '../theme/app_theme.dart';
 
@@ -31,6 +33,7 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
   String? _errorMessage;
   StreamSubscription<QuickShareTransferProgress>? _uploadSub;
   QuickShareTransferProgress? _latestProgress;
+  DateTime? _lastNotificationUpdateTime;
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -61,11 +64,50 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
         sharedItems: widget.itemsToShare,
       );
 
+      try {
+        await WakelockPlus.enable();
+      } catch (_) {}
+
+      await DownloadBackgroundService.requestNotificationPermission();
+      await DownloadBackgroundService.startService(
+        title: 'Quick Share: กำลังแชร์ ${widget.anime.title}',
+        message: 'พร้อมส่ง ${widget.itemsToShare.length} ตอนผ่านเครือข่าย...',
+        progress: 0,
+        max: 100,
+      );
+
+      _uploadSub?.cancel();
       _uploadSub = _quickShare.uploadProgressStream.listen((progress) {
         if (mounted) {
           setState(() {
             _latestProgress = progress;
           });
+        }
+
+        final now = DateTime.now();
+        if (_lastNotificationUpdateTime == null ||
+            now.difference(_lastNotificationUpdateTime!).inMilliseconds > 800 ||
+            progress.isCompleted) {
+          _lastNotificationUpdateTime = now;
+          if (progress.isCompleted) {
+            DownloadBackgroundService.updateProgress(
+              title: 'Quick Share: ส่งไฟล์สำเร็จ',
+              message: '${progress.currentEpisodeTitle} ส่งเสร็จแล้ว',
+              progress: 100,
+              max: 100,
+            );
+          } else {
+            final percent = (progress.overallPercent * 100).toInt();
+            final speed = progress.speedMBs > 0
+                ? ' • ${progress.speedMBs.toStringAsFixed(1)} MB/s'
+                : '';
+            DownloadBackgroundService.updateProgress(
+              title: 'Quick Share: กำลังส่ง ${widget.anime.title} ($percent%)',
+              message: '${progress.currentEpisodeTitle}$speed',
+              progress: percent,
+              max: 100,
+            );
+          }
         }
       });
 
@@ -90,6 +132,10 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
     _uploadSub?.cancel();
     _quickShare.stopHosting();
     _pulseController.dispose();
+    try {
+      WakelockPlus.disable();
+    } catch (_) {}
+    DownloadBackgroundService.stopService();
     super.dispose();
   }
 
@@ -579,6 +625,26 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
 
                         const SizedBox(height: 24),
 
+                        // Minimize to background Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: () => DownloadBackgroundService.minimizeApp(),
+                            icon: const Icon(Icons.arrow_downward_rounded, color: AppTheme.accent),
+                            label: const Text('ย่อแอปเพื่อแชร์ต่อในพื้นหลัง'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.accent,
+                              side: BorderSide(color: AppTheme.accent.withOpacity(0.5)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
                         // Close / Done Button
                         SizedBox(
                           width: double.infinity,
@@ -607,37 +673,50 @@ class _QuickShareSenderScreenState extends State<QuickShareSenderScreen>
     final isTransferring =
         _latestProgress != null && !_latestProgress!.isCompleted;
 
-    if (isTransferring) {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppTheme.card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('กำลังส่งข้อมูลอยู่',
-              style: TextStyle(color: Colors.white, fontSize: 16)),
-          content: const Text(
-            'อีกเครื่องกำลังรับไฟล์อยู่ หากปิดหน้านี้การถ่ายโอนจะถูกยกเลิก ต้องการปิดหรือไม่?',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('ส่งต่อ', style: TextStyle(color: Colors.white70)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('ปิดทันที',
-                  style: TextStyle(color: Colors.redAccent)),
-            ),
-          ],
+    final action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(isTransferring ? 'กำลังส่งข้อมูลอยู่' : 'ปิดหน้าต่างแชร์',
+            style: const TextStyle(color: Colors.white, fontSize: 16)),
+        content: Text(
+          isTransferring
+              ? 'อีกเครื่องกำลังรับไฟล์อยู่ ท่านสามารถย่อแอปเพื่อส่งต่อในเบื้องหลังได้ หรือหยุดการแชร์ทันที'
+              : 'ต้องการย่อแอปเพื่อรอให้อีกเครื่องเชื่อมต่อในเบื้องหลัง หรือหยุดการแชร์ทันที?',
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
-      );
-      if (confirm != true) return;
-    }
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('cancel'),
+            child: const Text('ยกเลิก', style: TextStyle(color: Colors.white60)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('stop'),
+            child: const Text('หยุดการแชร์และปิด',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(ctx).pop('minimize'),
+            icon: const Icon(Icons.arrow_downward_rounded, size: 16),
+            label: const Text('ย่อแอป (แชร์ต่อ)'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
 
-    if (mounted) {
-      Navigator.of(context).pop();
+    if (action == 'minimize') {
+      await DownloadBackgroundService.minimizeApp();
+      return;
+    } else if (action == 'stop') {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 }

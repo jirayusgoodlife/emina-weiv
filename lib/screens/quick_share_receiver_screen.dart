@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/isar_models.dart';
 import '../models/quick_share_models.dart';
 import '../providers/anime_catalog_provider.dart';
 import '../providers/download_provider.dart';
+import '../services/download_background_service.dart';
 import '../services/isar_service.dart';
 import '../services/quick_share_service.dart';
 import '../theme/app_theme.dart';
@@ -35,6 +37,7 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
   QuickShareManifest? _activeManifest;
   QuickShareTransferProgress? _transferProgress;
   String? _statusError;
+  DateTime? _lastNotificationUpdateTime;
 
   @override
   void initState() {
@@ -63,6 +66,12 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
   void dispose() {
     _isCancelled = true;
     _discoverySub?.cancel();
+    try {
+      WakelockPlus.disable();
+    } catch (_) {}
+    if (_isTransferring) {
+      DownloadBackgroundService.stopService();
+    }
     super.dispose();
   }
 
@@ -522,6 +531,18 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
     });
 
     try {
+      await WakelockPlus.enable();
+    } catch (_) {}
+
+    await DownloadBackgroundService.requestNotificationPermission();
+    await DownloadBackgroundService.startService(
+      title: 'Quick Share: กำลังรับ ${manifest.anime.title}',
+      message: 'กำลังเริ่มรับ ${selectedEpisodeIds.length} ตอน...',
+      progress: 0,
+      max: 100,
+    );
+
+    try {
       await _quickShare.receiveTransfer(
         serverUrl: serverUrl,
         manifest: manifest,
@@ -536,15 +557,45 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
               _transferProgress = progress;
             });
           }
+
+          final now = DateTime.now();
+          if (_lastNotificationUpdateTime == null ||
+              now.difference(_lastNotificationUpdateTime!).inMilliseconds > 800 ||
+              progress.isCompleted) {
+            _lastNotificationUpdateTime = now;
+            final percent = (progress.overallPercent * 100).toInt();
+            final recMb =
+                (progress.totalBytesTransferred / (1024 * 1024)).toStringAsFixed(1);
+            final totMb =
+                (progress.totalBytesAll / (1024 * 1024)).toStringAsFixed(1);
+            final speed = progress.speedMBs > 0
+                ? ' • ${progress.speedMBs.toStringAsFixed(1)} MB/s'
+                : '';
+            DownloadBackgroundService.updateProgress(
+              title: 'Quick Share: กำลังรับ ${manifest.anime.title} ($percent%)',
+              message:
+                  'ตอนที่ ${progress.currentEpisodeIndex}/${progress.totalEpisodes} ($recMb/$totMb MB$speed)',
+              progress: percent,
+              max: 100,
+            );
+          }
         },
       );
+
+      await DownloadBackgroundService.stopService(
+        summary: 'รับ ${manifest.anime.title} สำเร็จแล้ว (${selectedEpisodeIds.length} ตอน)',
+      );
     } catch (e) {
+      await DownloadBackgroundService.stopService();
       if (mounted) {
         setState(() {
           _statusError = e.toString().replaceAll('Exception: ', '');
         });
       }
     } finally {
+      try {
+        await WakelockPlus.disable();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _isTransferring = false;
@@ -558,40 +609,98 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
     final hasCompleted =
         _transferProgress != null && _transferProgress!.isCompleted;
 
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: const Text('Quick Share (เครื่องรับ)'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accent),
-            tooltip: 'สแกน QR Code เพื่อรับ',
-            onPressed: _isTransferring ? null : _scanQrCode,
-          ),
-          IconButton(
-            icon: const Icon(Icons.link, color: Colors.white70),
-            tooltip: 'กรอก IP เซิร์ฟเวอร์',
-            onPressed: _isTransferring ? null : _manualInputUrl,
-          ),
-        ],
-      ),
-      body: _isConnecting
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: AppTheme.accent),
-                  SizedBox(height: 16),
-                  Text('กำลังเชื่อมต่อเครื่องผู้ส่งและดึงรายการ...',
-                      style: TextStyle(color: Colors.white70)),
-                ],
+    return WillPopScope(
+      onWillPop: () async {
+        if (_isTransferring) {
+          final action = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppTheme.card,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text('กำลังรับไฟล์อยู่',
+                  style: TextStyle(color: Colors.white, fontSize: 16)),
+              content: const Text(
+                'ท่านสามารถย่อแอปเพื่อดาวน์โหลดต่อในเบื้องหลังได้ หรือยกเลิกการถ่ายโอน',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
-            )
-          : _isTransferring
-              ? _buildTransferringView()
-              : hasCompleted
-                  ? _buildSuccessView()
-                  : _buildDiscoveryView(),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('cancel'),
+                  child: const Text('ยกเลิกการถ่ายโอน',
+                      style: TextStyle(color: Colors.redAccent)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('stay'),
+                  child: const Text('อยู่หน้านี้ต่อ',
+                      style: TextStyle(color: Colors.white70)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(ctx).pop('minimize'),
+                  icon: const Icon(Icons.arrow_downward_rounded, size: 16),
+                  label: const Text('ย่อแอป (ทำงานต่อ)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (action == 'minimize') {
+            await DownloadBackgroundService.minimizeApp();
+            return false;
+          } else if (action == 'cancel') {
+            setState(() {
+              _isCancelled = true;
+              _isTransferring = false;
+            });
+            await DownloadBackgroundService.stopService();
+            try {
+              await WakelockPlus.disable();
+            } catch (_) {}
+            return true;
+          }
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.background,
+        appBar: AppBar(
+          title: const Text('Quick Share (เครื่องรับ)'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accent),
+              tooltip: 'สแกน QR Code เพื่อรับ',
+              onPressed: _isTransferring ? null : _scanQrCode,
+            ),
+            IconButton(
+              icon: const Icon(Icons.link, color: Colors.white70),
+              tooltip: 'กรอก IP เซิร์ฟเวอร์',
+              onPressed: _isTransferring ? null : _manualInputUrl,
+            ),
+          ],
+        ),
+        body: _isConnecting
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.accent),
+                    SizedBox(height: 16),
+                    Text('กำลังเชื่อมต่อเครื่องผู้ส่งและดึงรายการ...',
+                        style: TextStyle(color: Colors.white70)),
+                  ],
+                ),
+              )
+            : _isTransferring
+                ? _buildTransferringView()
+                : hasCompleted
+                    ? _buildSuccessView()
+                    : _buildDiscoveryView(),
+      ),
     );
   }
 
@@ -675,21 +784,54 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
               ),
               const SizedBox(height: 24),
 
-              ElevatedButton.icon(
+              // Minimize to background button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => DownloadBackgroundService.minimizeApp(),
+                  icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                  label: const Text('ย่อแอปเพื่อรับในเบื้องหลัง'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              OutlinedButton.icon(
                 onPressed: () {
                   setState(() {
                     _isCancelled = true;
                   });
                 },
-                icon: const Icon(Icons.cancel_outlined),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
                 label: const Text('ยกเลิกการถ่ายโอน'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent.withOpacity(0.2),
+                style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.redAccent,
+                  side: BorderSide(color: Colors.redAccent.withOpacity(0.5)),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
+              ),
+              const SizedBox(height: 14),
+
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.shield_outlined, size: 14, color: Colors.white54),
+                  SizedBox(width: 6),
+                  Text(
+                    'ทำงานต่อในเบื้องหลังแม้ปิดหน้าจอหรือสลับแอป',
+                    style: TextStyle(color: Colors.white54, fontSize: 11.5),
+                  ),
+                ],
               ),
             ],
           ),
