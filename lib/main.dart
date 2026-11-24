@@ -36,6 +36,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<IsarService>.value(value: isarService),
         ChangeNotifierProvider(
           create: (_) => AnimeCatalogProvider(
             isarService: isarService,

@@ -171,7 +171,8 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
       final workingUrl = _quickShare.lastSuccessfulServerUrl ??
           QuickShareService.parseServerUrlFromQr(rawUrl);
 
-      final isarService = Provider.of<IsarService>(context, listen: false);
+      final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
+      final isarService = catalog.isarService;
       final existingAnime = await isarService.getAnimeBySlug(manifest.anime.slug);
       if (!mounted) return;
       final isNewAnime = existingAnime == null;
@@ -206,7 +207,7 @@ class _QuickShareReceiverScreenState extends State<QuickShareReceiverScreen> {
     bool isNewAnime = true,
   }) {
     final catalog = Provider.of<AnimeCatalogProvider>(context, listen: false);
-    final isarService = Provider.of<IsarService>(context, listen: false);
+    final isarService = catalog.isarService;
     final downloadProv = Provider.of<DownloadProvider>(context, listen: false);
 
     final selectedEpIds = manifest.sharedEpisodes.map((e) => e.episodeId).toSet();

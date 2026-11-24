@@ -40,6 +40,7 @@ class AnimeCatalogProvider extends ChangeNotifier {
   }
 
   List<AnimeCollection> get allAnime => _allAnime;
+  IsarService get isarService => _isarService;
   bool get isHiddenTabSelected => _selectedGenre == hiddenGenreName;
 
   List<AnimeCollection> get continueWatching {
